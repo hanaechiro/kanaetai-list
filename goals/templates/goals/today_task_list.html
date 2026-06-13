@@ -1,0 +1,28 @@
+{% extends "goals/base.html" %}
+
+{% block title %}今日やること - 叶えたいことリスト{% endblock %}
+
+{% block content %}
+<div class="page-title">
+    <div>
+        <h2>今日やること</h2>
+        <p class="meta">{{ selected_date|date:"Y年n月j日" }}</p>
+    </div>
+    <a class="button" href="{% url 'goals:today_task_add' %}">追加する</a>
+</div>
+
+<form class="filter-bar" method="get">
+    <a class="button small-button" href="?date={{ previous_date|date:'Y-m-d' }}">前の日</a>
+    <input type="date" name="date" value="{{ selected_date|date:'Y-m-d' }}">
+    <button class="button small-button" type="submit">表示</button>
+    <a class="button small-button" href="?date={{ next_date|date:'Y-m-d' }}">次の日</a>
+</form>
+
+{% if task_count > 3 %}
+    <p class="notice">今日はタスクが多めです。3つに絞ると進めやすいです。</p>
+{% else %}
+    <p class="notice">今日のタスクは3つまでがおすすめです。今は {{ task_count }}件です。</p>
+{% endif %}
+
+{% include "goals/partials/today_tasks.html" with tasks=tasks show_actions=True %}
+{% endblock %}

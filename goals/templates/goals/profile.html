@@ -1,0 +1,424 @@
+{% extends "goals/base.html" %}
+
+{% block title %}{% if is_own_profile %}マイノート{% else %}プロフィール{% endif %} - 叶えたいことリスト{% endblock %}
+
+{% block content %}
+<style>
+    .cover-page {
+        display: grid;
+        gap: 18px;
+    }
+    .note-cover {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid #ddcbb0;
+        border-radius: 20px;
+        background:
+            radial-gradient(circle at 20% 12%, rgba(255, 255, 255, 0.7), transparent 28%),
+            linear-gradient(135deg, rgba(136, 104, 65, 0.08), transparent 38%),
+            #fff6e6;
+        padding: 18px;
+        box-shadow:
+            0 18px 42px rgba(76, 57, 33, 0.13),
+            inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+    }
+    .note-cover::before {
+        content: "";
+        position: absolute;
+        inset: 14px;
+        pointer-events: none;
+        border: 1px solid rgba(175, 145, 103, 0.28);
+        border-radius: 18px;
+    }
+    .cover-profile {
+        position: relative;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 14px;
+        align-items: center;
+    }
+    .cover-avatar {
+        width: 68px;
+        height: 68px;
+        border: 4px solid #fffaf1;
+        box-shadow: 0 8px 18px rgba(83, 62, 36, 0.13);
+    }
+    .cover-name {
+        margin: 0;
+        color: #3d3021;
+        font-size: 24px;
+        line-height: 1.2;
+    }
+    .cover-username {
+        margin: 5px 0 0;
+        color: #7a6750;
+        font-size: 13px;
+        font-weight: 700;
+    }
+    .cover-bio {
+        position: relative;
+        margin: 8px 0 0;
+        max-width: 680px;
+        color: #5f4d38;
+        line-height: 1.6;
+    }
+    .cover-actions {
+        position: relative;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+        align-self: start;
+    }
+    .my-lists-section {
+        display: grid;
+        gap: 14px;
+    }
+    .section-heading {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 12px;
+    }
+    .section-heading h2,
+    .section-heading h3 {
+        margin: 0;
+        color: #3d3021;
+    }
+    .section-heading p {
+        margin: 4px 0 0;
+        color: #7a6750;
+    }
+    .my-list-cards {
+        display: grid;
+        gap: 14px;
+    }
+    .my-list-card {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid #dfcfb7;
+        border-radius: 18px;
+        background:
+            linear-gradient(transparent 31px, rgba(181, 154, 112, 0.16) 32px),
+            #fffaf0;
+        background-size: 100% 32px;
+        padding: 18px;
+        color: inherit;
+        box-shadow: 0 10px 24px rgba(76, 57, 33, 0.09);
+    }
+    .my-list-card::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 10px;
+        width: 2px;
+        background: rgba(170, 118, 90, 0.18);
+    }
+    .my-list-card-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-left: 10px;
+    }
+    .my-list-card h3 {
+        margin: 0;
+        font-size: 19px;
+        line-height: 1.45;
+    }
+    .profile-list-title-link {
+        color: #3e3326;
+        text-decoration: none;
+    }
+    .profile-list-title-link:hover,
+    .profile-list-title-link:focus,
+    .profile-list-title-link:active {
+        color: #6f5634;
+        text-decoration: underline;
+        text-underline-offset: 4px;
+    }
+    .list-updated {
+        color: #8a7a67;
+        font-size: 12px;
+        white-space: nowrap;
+    }
+    .list-progress-text {
+        margin: 12px 0 8px 10px;
+        color: #5e5143;
+        font-weight: 700;
+    }
+    .my-list-card .progress-track {
+        margin-left: 10px;
+        width: calc(100% - 10px);
+        height: 9px;
+        background: #eadfce;
+    }
+    .list-card-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 10px 0 0 10px;
+    }
+    .activity-summary {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0;
+        border: 1px solid #e5d8c4;
+        border-radius: 16px;
+        background: #fffdf8;
+        padding: 0;
+        color: #6a5841;
+        overflow: hidden;
+        box-shadow: 0 8px 18px rgba(76, 57, 33, 0.06);
+    }
+    .activity-summary span {
+        display: grid;
+        gap: 4px;
+        min-height: 72px;
+        place-items: center;
+        padding: 12px;
+        text-align: center;
+        border-right: 1px solid #eadfce;
+        white-space: normal;
+    }
+    .activity-summary span:last-child {
+        border-right: 0;
+    }
+    .activity-summary strong {
+        color: #3d3021;
+        display: block;
+        font-size: 22px;
+        line-height: 1;
+    }
+    .more-menu {
+        border: 1px solid #e5d8c4;
+        border-radius: 16px;
+        background: #fffdf8;
+        padding: 0;
+        box-shadow: 0 8px 18px rgba(76, 57, 33, 0.06);
+    }
+    .more-menu summary {
+        cursor: pointer;
+        list-style: none;
+        padding: 14px 16px;
+        color: #4d3d2b;
+        font-weight: 700;
+    }
+    .more-menu summary::-webkit-details-marker {
+        display: none;
+    }
+    .more-menu-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 0 16px 16px;
+    }
+    .public-profile-lists {
+        display: grid;
+        gap: 22px;
+        margin-top: 14px;
+    }
+    @media (max-width: 768px) {
+        .cover-page {
+            gap: 18px;
+        }
+        .note-cover {
+            border-radius: 18px;
+            padding: 16px;
+        }
+        .cover-profile {
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            justify-items: stretch;
+            text-align: left;
+            gap: 12px;
+        }
+        .cover-avatar {
+            width: 60px;
+            height: 60px;
+        }
+        .cover-name {
+            font-size: 21px;
+        }
+        .cover-bio {
+            text-align: left;
+        }
+        .cover-actions {
+            justify-content: flex-end;
+        }
+        .section-heading {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+        .my-list-card {
+            border-radius: 18px;
+            padding: 17px 15px;
+        }
+        .my-list-card-header {
+            display: grid;
+            gap: 6px;
+        }
+        .list-updated {
+            white-space: normal;
+        }
+        .activity-summary {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            font-size: 13px;
+        }
+        .activity-summary span {
+            border-right: 1px solid #eadfce;
+            border-bottom: 1px solid #eadfce;
+        }
+        .activity-summary span:nth-child(2n) {
+            border-right: 0;
+        }
+        .activity-summary span:nth-last-child(-n+2) {
+            border-bottom: 0;
+        }
+        .more-menu-links {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .more-menu-links .button,
+        .more-menu-links form,
+        .more-menu-links button {
+            width: 100%;
+        }
+    }
+</style>
+
+{% if is_own_profile %}
+    <div class="cover-page">
+        <section class="note-cover">
+            <div class="cover-profile">
+                <span class="avatar large cover-avatar">
+                    {% if profile.icon %}
+                        <img src="{{ profile.icon.url }}" alt="">
+                    {% else %}
+                        {{ profile.display_name|default:profile_user.username|slice:":1" }}
+                    {% endif %}
+                </span>
+                <div>
+                    <h2 class="cover-name">{{ profile.display_name|default:profile_user.username }}</h2>
+                    <p class="cover-username">@{{ profile_user.username }}</p>
+                    {% if profile.bio %}
+                        <p class="cover-bio">{{ profile.bio|linebreaksbr }}</p>
+                    {% endif %}
+                </div>
+                <div class="cover-actions">
+                    <a class="button small-button pill-button" href="{% url 'goals:edit_profile' %}">編集</a>
+                </div>
+            </div>
+        </section>
+
+        <section class="activity-summary" aria-label="活動サマリー">
+            <span>達成 <strong>{{ profile_stats.done_item_count }}</strong></span>
+            <span>保存 <strong>{{ profile_stats.saved_count }}</strong></span>
+            <span>フォロー <strong>{{ profile_stats.following_count }}</strong></span>
+            <span>フォロワー <strong>{{ profile_stats.followers_count }}</strong></span>
+        </section>
+
+        <section class="my-lists-section">
+            <div class="section-heading">
+                <div>
+                    <h2>あなたのマイリスト</h2>
+                    <p>最近更新したノートから表示しています。</p>
+                </div>
+                <a class="button small-button pill-button" href="{% url 'goals:my_list_add' %}">新しいリスト</a>
+            </div>
+
+            <div class="my-list-cards">
+                {% for group in goal_groups %}
+                    <article class="my-list-card">
+                        <div class="my-list-card-header">
+                            <h3>
+                                <a class="profile-list-title-link" href="{% url 'goals:my_list_detail' group.plan.pk %}">{{ group.list_title }}</a>
+                            </h3>
+                            <span class="list-updated">{{ group.plan.updated_at|date:"Y/m/d H:i" }}</span>
+                        </div>
+                        <p class="list-progress-text">進捗 {{ group.done_count }}/{{ group.target_count }}</p>
+                        <div class="progress-track">
+                            <div class="progress-bar" style="width: {{ group.progress_percent }}%;"></div>
+                        </div>
+                        <div class="list-card-meta">
+                            <span class="status-pill">登録 {{ group.total_count }}</span>
+                            <span class="status-pill {% if not group.plan.is_public %}private{% endif %}">
+                                {% if group.plan.is_public %}公開{% else %}非公開{% endif %}
+                            </span>
+                        </div>
+                    </article>
+                {% empty %}
+                    <p class="notice">マイリストはまだありません。まずは小さなリストを1冊作ってみましょう。</p>
+                {% endfor %}
+            </div>
+        </section>
+
+        <details class="more-menu">
+            <summary>その他メニュー</summary>
+            <div class="more-menu-links">
+                <a class="button small-button pill-button" href="{% url 'goals:saved_list_page' %}">保存したリスト</a>
+                <a class="button small-button pill-button" href="{% url 'goals:following_list_page' %}">フォロー中</a>
+                <a class="button small-button pill-button" href="{% url 'goals:template_list' %}">テンプレート</a>
+                <a class="button small-button pill-button" href="{% url 'goals:idea_memo_list' %}">思いつきメモ</a>
+                <a class="button small-button pill-button" href="{% url 'goals:together_requests' %}">一緒にやりたい</a>
+                <form method="post" action="{% url 'logout' %}">
+                    {% csrf_token %}
+                    <button class="button small-button pill-button" type="submit">ログアウト</button>
+                </form>
+            </div>
+        </details>
+    </div>
+{% else %}
+    <div class="page-title">
+        <h2>{{ profile.display_name|default:profile_user.username }}</h2>
+        <div class="actions">
+            <form method="post" action="{% url 'goals:toggle_follow' profile_user.username %}">
+                {% csrf_token %}
+                <button class="button small-button pill-button" type="submit">{% if is_following %}フォロー中{% else %}フォロー{% endif %}</button>
+            </form>
+        </div>
+    </div>
+
+    <section class="note-cover">
+        <div class="cover-profile">
+            <span class="avatar large cover-avatar">
+                {% if profile.icon %}
+                    <img src="{{ profile.icon.url }}" alt="">
+                {% else %}
+                    {{ profile.display_name|default:profile_user.username|slice:":1" }}
+                {% endif %}
+            </span>
+            <div>
+                <h2 class="cover-name">{{ profile.display_name|default:profile_user.username }}さん</h2>
+                <p class="cover-username">@{{ profile_user.username }}</p>
+                {% if profile.bio %}
+                    <p class="cover-bio">{{ profile.bio|linebreaksbr }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <section class="activity-summary" aria-label="活動サマリー" style="margin-top: 18px;">
+        <span>達成 <strong>{{ profile_stats.done_item_count }}</strong></span>
+        <span>保存 <strong>{{ profile_stats.saved_count }}</strong></span>
+        <span>フォロー <strong>{{ profile_stats.following_count }}</strong></span>
+        <span>フォロワー <strong>{{ profile_stats.followers_count }}</strong></span>
+    </section>
+
+    <section style="margin-top: 22px;">
+        <div class="section-heading">
+            <div>
+                <h3>公開マイリスト</h3>
+                <p>公開されているリストだけを表示しています。</p>
+            </div>
+        </div>
+        <div class="public-profile-lists">
+            {% for group in goal_groups %}
+                {% include "goals/partials/public_list_card.html" with group=group hide_profile_link=True %}
+            {% empty %}
+                <p class="notice">表示できるマイリストはまだありません。</p>
+            {% endfor %}
+        </div>
+    </section>
+{% endif %}
+{% endblock %}

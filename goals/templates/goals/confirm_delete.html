@@ -1,0 +1,19 @@
+{% extends "goals/base.html" %}
+
+{% block title %}削除確認 - 叶えたいことリスト{% endblock %}
+
+{% block content %}
+<div class="page-title">
+    <h2>削除しますか？</h2>
+</div>
+
+<form class="form-box" method="post">
+    {% csrf_token %}
+    <p>「{{ object }}」を削除します。</p>
+    <p class="meta">マイリストを削除する場合、そのリストに紐づく項目も削除されます。</p>
+    <div class="actions">
+        <button class="button danger" type="submit">削除する</button>
+        <a class="button" href="{{ cancel_url }}">キャンセル</a>
+    </div>
+</form>
+{% endblock %}

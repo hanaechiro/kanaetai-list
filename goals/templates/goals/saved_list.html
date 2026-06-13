@@ -1,0 +1,151 @@
+{% extends "goals/public_goal_list.html" %}
+
+{% block title %}保存したリスト - 叶えたいことリスト{% endblock %}
+
+{% block content %}
+<style>
+    .notebook-list {
+        display: grid;
+        gap: 22px;
+    }
+    .notebook-card {
+        border: 1px solid #dfd2c0;
+        border-radius: 8px;
+        background: #fffdf8;
+        box-shadow: 0 8px 18px rgba(77, 61, 42, 0.08);
+        overflow: hidden;
+    }
+    .notebook-header,
+    .public-list-actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 18px;
+        border-bottom: 1px solid #eadfce;
+        background: #fff8ec;
+    }
+    .public-list-actions {
+        justify-content: flex-start;
+        padding: 10px 18px;
+        background: #fffdf8;
+    }
+    .page-control {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        margin-right: auto;
+        color: #5e5143;
+        font-weight: 700;
+    }
+    .pagination .button {
+        width: auto;
+        flex: 0 0 auto;
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+    .notebook-title,
+    .notebook-progress,
+    .public-goal-main {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+    }
+    .notebook-title h3 {
+        margin: 0;
+        font-size: 18px;
+    }
+    .list-name {
+        font-weight: 700;
+    }
+    .spread {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        background: linear-gradient(90deg, transparent calc(50% - 1px), #eadfce calc(50% - 1px), #eadfce calc(50% + 1px), transparent calc(50% + 1px));
+    }
+    .page {
+        min-height: 170px;
+        padding: 16px 18px 18px;
+    }
+    .page-label {
+        margin: 0 0 10px;
+        color: #8a7a67;
+        font-size: 12px;
+        font-weight: 700;
+    }
+    .public-goal-row {
+        display: grid;
+        grid-template-columns: 20px minmax(0, 1fr) max-content;
+        gap: 8px;
+        align-items: center;
+        padding: 7px 0;
+        border-bottom: 1px solid #f0e8dc;
+    }
+    .public-goal-title {
+        font-weight: 600;
+    }
+    .public-goal-row.done .public-goal-title {
+        color: #777;
+        text-decoration: line-through;
+    }
+    .public-list-actions form,
+    .want-form {
+        margin: 0;
+    }
+    .related-page-link {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 18px;
+    }
+    .related-page-link a {
+        color: #6a5538;
+        font-weight: 700;
+        text-decoration: none;
+        text-underline-offset: 4px;
+    }
+    .related-page-link a:hover,
+    .related-page-link a:focus,
+    .related-page-link a:active {
+        text-decoration: underline;
+    }
+    @media (max-width: 760px) {
+        .spread {
+            grid-template-columns: 1fr;
+            background: none;
+        }
+        .notebook-header {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+    }
+</style>
+
+<div class="page-title">
+    <h2>{{ page_heading|default:"保存したリスト" }}</h2>
+</div>
+
+<section class="notebook-list">
+    {% for group in goal_groups %}
+        {% include "goals/partials/public_list_card.html" with group=group %}
+    {% empty %}
+        <p class="notice">保存した公開マイリストはまだありません。</p>
+    {% endfor %}
+</section>
+{% if page_obj and page_obj.paginator.num_pages > 1 %}
+    <nav class="pagination">
+        {% if page_obj.has_previous %}
+            <a class="button small-button" href="?page={{ page_obj.previous_page_number }}">前へ</a>
+        {% endif %}
+        <span>{{ page_obj.number }} / {{ page_obj.paginator.num_pages }} ページ</span>
+        {% if page_obj.has_next %}
+            <a class="button small-button" href="?page={{ page_obj.next_page_number }}">次へ</a>
+        {% endif %}
+    </nav>
+{% endif %}
+
+<div class="related-page-link">
+    <a href="{% url 'goals:public_goal_list' %}">みんなのマイリストへ</a>
+</div>
+{% endblock %}

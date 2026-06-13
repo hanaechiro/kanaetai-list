@@ -1,0 +1,24 @@
+{% extends "goals/base.html" %}
+
+{% block title %}思いつきメモ - 叶えたいことリスト{% endblock %}
+
+{% block content %}
+<div class="page-title">
+    <h2>思いつきメモ</h2>
+    <a class="button" href="{% url 'goals:idea_memo_add' %}">追加する</a>
+</div>
+
+{% for memo in memos %}
+    <article class="item">
+        <div class="item-title">{{ memo.title }}</div>
+        {% if memo.note %}<p>{{ memo.note|linebreaksbr }}</p>{% endif %}
+        <p class="meta">{{ memo.created_at|date:"Y年n月j日 H:i" }}</p>
+        <div class="actions">
+            <a class="button" href="{% url 'goals:idea_memo_edit' memo.pk %}">編集</a>
+            <a class="button danger" href="{% url 'goals:idea_memo_delete' memo.pk %}">削除</a>
+        </div>
+    </article>
+{% empty %}
+    <p class="notice">まだ思いつきメモがありません。</p>
+{% endfor %}
+{% endblock %}

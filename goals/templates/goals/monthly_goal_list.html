@@ -1,0 +1,24 @@
+{% extends "goals/base.html" %}
+
+{% block title %}今月やること - 叶えたいことリスト{% endblock %}
+
+{% block content %}
+<div class="page-title">
+    <div>
+        <h2>今月やること</h2>
+        <p class="meta">{{ selected_month|date:"Y年n月" }}</p>
+    </div>
+    <a class="button" href="{% url 'goals:monthly_goal_add' %}">追加する</a>
+</div>
+
+<div class="filter-bar">
+    <a class="button small-button" href="?month={{ previous_month|date:'Y-m-d' }}">前の月</a>
+    <a class="button small-button" href="?month={{ next_month|date:'Y-m-d' }}">次の月</a>
+</div>
+
+{% if task_count > 3 %}
+    <p class="notice">今月のTODOが多めです。まずは大事な3つから進めると動きやすいです。</p>
+{% endif %}
+
+{% include "goals/partials/monthly_goals.html" with goals=goals show_actions=True %}
+{% endblock %}

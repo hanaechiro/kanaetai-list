@@ -1,0 +1,101 @@
+<article class="notebook-card book">
+    <header class="notebook-header">
+        <div class="notebook-title">
+            <span class="avatar">
+                {% if group.user.profile.icon %}
+                    <img src="{{ group.user.profile.icon.url }}" alt="">
+                {% else %}
+                    {{ group.display_name|slice:":1" }}
+                {% endif %}
+            </span>
+            <h3>{{ group.display_name }}さん</h3>
+            <span class="list-name">「{{ group.list_title }}」</span>
+            {% if group.user and not hide_profile_link %}
+                <a class="profile-link" href="{% url 'goals:profile_detail' group.user.username %}">プロフィール</a>
+            {% endif %}
+            {% if group.can_react %}
+                <form method="post" action="{% url 'goals:toggle_follow' group.user.username %}">
+                    {% csrf_token %}
+                    <button class="button small-button pill-button" type="submit">
+                        {% if group.is_following %}フォロー中{% else %}フォロー{% endif %}
+                    </button>
+                </form>
+            {% elif not user.is_authenticated and group.user %}
+                <form method="post" action="{% url 'goals:toggle_follow' group.user.username %}">
+                    {% csrf_token %}
+                <button class="button small-button pill-button" type="submit">フォロー</button>
+                </form>
+            {% endif %}
+        </div>
+        <div class="notebook-progress">
+            達成 {{ group.done_count }}/{{ group.target_count }}
+            <span class="status-pill">♡ {{ group.like_count }}</span>
+            {% if group.show_item_privacy and not group.plan.is_public %}
+                <span class="status-pill private">リスト非公開</span>
+            {% endif %}
+        </div>
+    </header>
+
+    <div class="public-list-actions">
+        <div class="page-control">
+            {% if group.list_previous_query %}
+                <a class="button small-button pill-button" href="?{{ group.list_previous_query }}">前へ</a>
+            {% endif %}
+            <span>{{ group.list_current_page }} / {{ group.list_total_pages }}ページ</span>
+            {% if group.list_next_query %}
+                <a class="button small-button pill-button" href="?{{ group.list_next_query }}">次へ</a>
+            {% endif %}
+        </div>
+        {% if group.can_react %}
+            <form method="post" action="{% url 'goals:toggle_saved_list' group.plan.pk %}">
+                {% csrf_token %}
+                <button class="button small-button pill-button" type="submit">
+                    {% if group.is_saved %}保存済み{% else %}保存{% endif %}
+                </button>
+            </form>
+            <form method="post" action="{% url 'goals:toggle_like_list' group.plan.pk %}">
+                {% csrf_token %}
+                <button class="button small-button pill-button" type="submit">
+                    {% if group.is_liked %}♥{% else %}♡{% endif %}
+                </button>
+            </form>
+        {% elif not user.is_authenticated %}
+            <form method="post" action="{% url 'goals:toggle_saved_list' group.plan.pk %}">
+                {% csrf_token %}
+                <button class="button small-button pill-button" type="submit">保存</button>
+            </form>
+            <form method="post" action="{% url 'goals:toggle_like_list' group.plan.pk %}">
+                {% csrf_token %}
+                <button class="button small-button pill-button" type="submit">♡</button>
+            </form>
+        {% endif %}
+    </div>
+
+    <div style="padding: 0 18px 12px;">
+        <p class="meta">達成 {{ group.done_count }}件 / 登録 {{ group.total_count }}件 / 目標 {{ group.target_count }}件</p>
+        <div class="progress-track">
+            <div class="progress-bar" style="width: {{ group.progress_percent }}%;"></div>
+        </div>
+    </div>
+
+    <div class="spread book-spread">
+        <div class="page book-page">
+            <p class="page-label">左ページ</p>
+            {% for goal in group.left_goals %}
+                {% include "goals/partials/public_list_goal_row.html" with goal=goal group=group %}
+            {% empty %}
+                <p class="meta">項目はありません。</p>
+            {% endfor %}
+        </div>
+
+        <div class="page book-page">
+            <p class="page-label">右ページ</p>
+            {% for goal in group.right_goals %}
+                {% include "goals/partials/public_list_goal_row.html" with goal=goal group=group %}
+            {% empty %}
+                <p class="meta">項目はありません。</p>
+            {% endfor %}
+        </div>
+    </div>
+
+</article>

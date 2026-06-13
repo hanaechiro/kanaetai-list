@@ -1,0 +1,63 @@
+{% extends "goals/base.html" %}
+
+{% block title %}{{ template.title }} - テンプレート{% endblock %}
+
+{% block content %}
+<style>
+    .template-detail-nav {
+        margin-bottom: 12px;
+    }
+    .template-detail-nav a {
+        color: #6a5538;
+        font-weight: 700;
+        text-decoration: none;
+    }
+    .template-title-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: start;
+        gap: 14px;
+        margin-bottom: 16px;
+    }
+    .template-title-row h2 {
+        margin: 0;
+    }
+    .template-title-action {
+        display: flex;
+        justify-content: flex-end;
+    }
+    .template-title-action .button {
+        white-space: nowrap;
+    }
+</style>
+
+<div class="template-detail-nav">
+    <a href="{% url 'goals:template_list' %}">← テンプレート一覧</a>
+</div>
+
+<div class="page-title template-title-row">
+    <h2>{{ template.title }}</h2>
+    <form class="template-title-action" method="post" action="{% url 'goals:use_template' template.slug %}">
+        {% csrf_token %}
+        <button class="button" type="submit">このテンプレートを使う</button>
+    </form>
+</div>
+
+<section class="panel">
+    <p class="meta">目標 {{ template.target_count }}件</p>
+</section>
+
+<section style="margin-top: 18px;">
+    <h3>テンプレート項目</h3>
+    <div class="checklist">
+        {% for item in display_items %}
+            <article class="list-row">
+                <div class="row-main">
+                    <span class="row-title">{{ item.title }}</span>
+                    <span class="status-pill">{{ item.category_label }}</span>
+                </div>
+            </article>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

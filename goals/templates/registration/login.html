@@ -1,0 +1,18 @@
+{% extends "goals/base.html" %}
+
+{% block title %}ログイン - 叶えたいことリスト{% endblock %}
+
+{% block content %}
+<div class="page-title">
+    <h2>ログイン</h2>
+</div>
+
+<form class="form-box" method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="actions">
+        <button class="button" type="submit">ログイン</button>
+        <a class="button" href="{% url 'goals:signup' %}">新規登録</a>
+    </div>
+</form>
+{% endblock %}

@@ -1,0 +1,47 @@
+<article class="discover-card">
+    <div class="discover-card-head">
+        <a class="avatar profile-avatar-link" href="{% url 'goals:profile_detail' group.user.username %}" aria-label="{{ group.display_name }}さんのプロフィール">
+            {% if group.user.profile.icon %}
+                <img src="{{ group.user.profile.icon.url }}" alt="">
+            {% else %}
+                {{ group.display_name|slice:":1" }}
+            {% endif %}
+        </a>
+        <div>
+            <p class="discover-user">{{ group.display_name }}さん</p>
+            <h3>
+                <a class="discover-title-link" href="{% url 'goals:public_list_detail' group.plan.pk %}">{{ group.list_title }}</a>
+            </h3>
+        </div>
+    </div>
+
+    <div class="discover-progress">
+        <div class="progress-track">
+            <div class="progress-bar" style="width: {{ group.progress_percent }}%;"></div>
+        </div>
+        <span>達成率 {{ group.progress_percent }}%</span>
+    </div>
+
+    <div class="discover-tags">
+        {% for label in group.category_labels|slice:":4" %}
+            <span class="status-pill">{{ label }}</span>
+        {% empty %}
+            <span class="status-pill">その他</span>
+        {% endfor %}
+    </div>
+
+    <dl class="discover-stats">
+        <div>
+            <dt>いいね</dt>
+            <dd>{{ group.like_count }}</dd>
+        </div>
+        <div>
+            <dt>保存</dt>
+            <dd>{{ group.save_count }}</dd>
+        </div>
+        <div>
+            <dt>公開項目</dt>
+            <dd>{{ group.total_count }}</dd>
+        </div>
+    </dl>
+</article>

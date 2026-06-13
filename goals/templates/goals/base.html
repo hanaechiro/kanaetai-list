@@ -1,0 +1,1121 @@
+<!doctype html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}叶えたいことリスト{% endblock %}</title>
+    <style>
+        body {
+            margin: 0;
+            color: #242424;
+            background: #f7f4ef;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        header {
+            background: #ffffff;
+            border-bottom: 1px solid #e5ded2;
+            padding: 18px 24px;
+        }
+        header h1 {
+            margin: 0 0 12px;
+            font-size: 24px;
+        }
+        .site-nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .mobile-menu {
+            display: contents;
+        }
+        .mobile-menu summary {
+            display: none;
+        }
+        .mobile-menu-content {
+            display: contents;
+        }
+        .nav-left, .nav-right {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        nav a, .button, .user-menu summary {
+            display: inline-block;
+            border: 1px solid #bca98f;
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: #3d3327;
+            background: #ffffff;
+            text-decoration: none;
+            cursor: pointer;
+            font: inherit;
+        }
+        nav form {
+            margin: 0;
+        }
+        nav a:hover, .button:hover, .user-menu summary:hover {
+            background: #efe7da;
+        }
+        .user-menu {
+            position: relative;
+        }
+        .user-menu summary {
+            list-style: none;
+        }
+        .user-menu summary::-webkit-details-marker {
+            display: none;
+        }
+        .user-menu-panel {
+            position: absolute;
+            right: 0;
+            z-index: 10;
+            display: grid;
+            gap: 6px;
+            min-width: 150px;
+            margin-top: 6px;
+            padding: 8px;
+            border: 1px solid #e3d9cb;
+            border-radius: 8px;
+            background: #ffffff;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+        }
+        .user-menu-panel a,
+        .user-menu-panel .button {
+            box-sizing: border-box;
+            width: 100%;
+            text-align: left;
+        }
+        main {
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 28px 18px 48px;
+        }
+        .page-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+        .page-title h2 {
+            margin: 0;
+            font-size: 26px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 18px;
+        }
+        .panel, .item, form.form-box {
+            border: 1px solid #e3d9cb;
+            border-radius: 8px;
+            background: #ffffff;
+            padding: 18px;
+        }
+        .panel h3 {
+            margin-top: 0;
+        }
+        .item {
+            margin-bottom: 12px;
+        }
+        .item.done {
+            opacity: 0.62;
+        }
+        .item.done .item-title {
+            text-decoration: line-through;
+        }
+        .item-title {
+            font-weight: 700;
+        }
+        .check-item {
+            display: grid;
+            grid-template-columns: 28px 1fr;
+            gap: 10px;
+            align-items: start;
+        }
+        .check-item input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            margin-top: 2px;
+            accent-color: #6f5634;
+            cursor: pointer;
+        }
+        .check-form {
+            margin: 0;
+        }
+        .date-pill {
+            display: inline-block;
+            border-radius: 999px;
+            background: #f1eadf;
+            color: #5a4c3d;
+            padding: 3px 9px;
+            font-size: 13px;
+            margin-left: 8px;
+        }
+        .meta {
+            color: #71675c;
+            font-size: 14px;
+            margin-top: 6px;
+        }
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .danger {
+            border-color: #c68686;
+            color: #842f2f;
+        }
+        .small-button {
+            border-radius: 5px;
+            padding: 4px 8px;
+            font-size: 13px;
+            line-height: 1.3;
+        }
+        .compact-action-button,
+        .want-button,
+        .together-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 96px;
+            white-space: nowrap;
+            text-align: center;
+        }
+        .public-goal-actions {
+            display: inline-flex;
+            flex-wrap: nowrap;
+            gap: 6px;
+            align-items: center;
+            justify-content: flex-end;
+        }
+        .public-goal-actions form {
+            flex: 0 0 auto;
+            margin: 0;
+        }
+        .public-goal-row {
+            grid-template-columns: 20px minmax(0, 1fr) max-content;
+        }
+        .disabled-button,
+        .disabled-button:hover,
+        button:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            background: #eeeeee;
+        }
+        .compact-settings {
+            padding: 12px 14px;
+            margin-bottom: 14px;
+        }
+        .compact-settings form p {
+            display: inline-block;
+            margin: 0 10px 8px 0;
+        }
+        .compact-settings label {
+            display: inline;
+            margin: 0 6px 0 0;
+        }
+        .compact-settings input,
+        .compact-settings select {
+            width: auto;
+            min-width: 90px;
+            padding: 5px 8px;
+        }
+        .filter-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            margin: 0 0 12px;
+        }
+        .filter-bar label {
+            margin: 0;
+            font-weight: 700;
+        }
+        .filter-bar select {
+            width: auto;
+            min-width: 130px;
+            padding: 5px 8px;
+        }
+        .checklist {
+            border: 1px solid #e3d9cb;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #ffffff;
+        }
+        .list-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
+            align-items: center;
+            min-height: 34px;
+            padding: 6px 8px;
+            border-bottom: 1px solid #eee8de;
+        }
+        .list-row:last-child {
+            border-bottom: 0;
+        }
+        .list-row.done {
+            color: #777;
+            background: #faf8f4;
+        }
+        .list-row.done .row-title {
+            text-decoration: line-through;
+        }
+        .row-check-form {
+            display: grid;
+            grid-template-columns: 24px minmax(0, 1fr);
+            gap: 8px;
+            align-items: center;
+            min-width: 0;
+            margin: 0;
+        }
+        .row-check-form input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            margin: 0;
+            accent-color: #6f5634;
+            cursor: pointer;
+        }
+        .row-main {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            min-width: 0;
+        }
+        .row-title {
+            min-width: 0;
+            overflow-wrap: anywhere;
+            font-weight: 600;
+        }
+        .completed-date {
+            color: #71675c;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+        .status-pill {
+            display: inline-block;
+            border-radius: 999px;
+            background: #f1eadf;
+            color: #5a4c3d;
+            padding: 2px 7px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        .status-pill.private {
+            background: #eeeeee;
+            color: #666666;
+        }
+        .progress-track {
+            width: 100%;
+            height: 10px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: #eee6da;
+        }
+        .progress-bar {
+            height: 100%;
+            border-radius: inherit;
+            background: #8c6f48;
+        }
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .stat-box {
+            border: 1px solid #eadfce;
+            border-radius: 8px;
+            background: #fffdf8;
+            padding: 10px;
+        }
+        .stat-box strong {
+            display: block;
+            font-size: 18px;
+        }
+        .avatar {
+            display: inline-grid;
+            place-items: center;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            overflow: hidden;
+            background: #efe7da;
+            color: #5a4c3d;
+            font-weight: 700;
+            vertical-align: middle;
+        }
+        .avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .avatar.large {
+            width: 84px;
+            height: 84px;
+            font-size: 30px;
+        }
+        .confetti-message {
+            position: relative;
+            overflow: hidden;
+        }
+        .confetti-message::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 15% 25%, #f5a623 0 3px, transparent 4px),
+                radial-gradient(circle at 45% 18%, #7bbf6a 0 3px, transparent 4px),
+                radial-gradient(circle at 72% 32%, #d86f8c 0 3px, transparent 4px),
+                radial-gradient(circle at 88% 60%, #5aa7d6 0 3px, transparent 4px);
+            animation: confetti-fade 1.4s ease-out;
+        }
+        @keyframes confetti-fade {
+            from { opacity: 1; transform: translateY(-8px); }
+            to { opacity: 0; transform: translateY(18px); }
+        }
+        .completion-editor {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+        }
+        .completion-editor label {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin: 0;
+            font-weight: 400;
+        }
+        .completion-editor input[type="date"] {
+            width: auto;
+            padding: 4px 6px;
+            font-size: 13px;
+        }
+        .row-actions {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+        .notice {
+            border-left: 4px solid #8c6f48;
+            background: #fffaf1;
+            padding: 12px 14px;
+            margin-bottom: 16px;
+        }
+        .messages {
+            margin-bottom: 16px;
+        }
+        .messages p {
+            background: #eef8ee;
+            border: 1px solid #cde8cd;
+            border-radius: 6px;
+            margin: 0 0 8px;
+            padding: 10px 12px;
+        }
+        label {
+            display: block;
+            font-weight: 700;
+            margin: 14px 0 6px;
+        }
+        input[type="text"], input[type="number"], input[type="date"], select, textarea {
+            box-sizing: border-box;
+            width: 100%;
+            border: 1px solid #cfc4b5;
+            border-radius: 6px;
+            padding: 9px 10px;
+            font: inherit;
+        }
+        textarea {
+            min-height: 120px;
+        }
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 14px;
+        }
+        .checkbox-row label {
+            margin: 0;
+        }
+        .book,
+        .notebook-card,
+        .yearly-notebook {
+            position: relative;
+            overflow: hidden;
+            border: 1px solid #d9c8ad;
+            border-radius: 18px;
+            background: #fbf3e4;
+            box-shadow:
+                0 18px 38px rgba(76, 57, 33, 0.13),
+                0 2px 0 rgba(255, 255, 255, 0.75) inset;
+        }
+        .book::before,
+        .notebook-card::before,
+        .yearly-notebook::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.5), transparent 28%),
+                linear-gradient(135deg, rgba(112, 83, 48, 0.04), transparent 38%);
+            mix-blend-mode: multiply;
+        }
+        .book-spread,
+        .spread {
+            position: relative;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            background:
+                linear-gradient(90deg, transparent calc(50% - 22px), rgba(73, 50, 28, 0.08) calc(50% - 2px), rgba(255, 255, 255, 0.65) 50%, rgba(73, 50, 28, 0.08) calc(50% + 2px), transparent calc(50% + 22px));
+        }
+        .book-gutter,
+        .book-spread::after,
+        .spread::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: calc(50% - 1px);
+            width: 2px;
+            pointer-events: none;
+            background: linear-gradient(180deg, transparent, rgba(96, 72, 42, 0.2) 14%, rgba(96, 72, 42, 0.22) 86%, transparent);
+            box-shadow:
+                -10px 0 18px rgba(85, 60, 35, 0.08),
+                10px 0 18px rgba(85, 60, 35, 0.08);
+        }
+        .book-page,
+        .page {
+            position: relative;
+            min-height: 300px;
+            padding: 22px 24px 24px;
+            background:
+                linear-gradient(transparent 31px, rgba(181, 154, 112, 0.18) 32px),
+                #fffaf0;
+            background-size: 100% 32px;
+            box-shadow: inset 0 0 28px rgba(88, 65, 35, 0.05);
+        }
+        .book-page:first-child,
+        .page:first-child {
+            border-right: 1px solid rgba(177, 151, 112, 0.22);
+        }
+        .book-page:last-child,
+        .page:last-child {
+            border-left: 1px solid rgba(255, 255, 255, 0.7);
+        }
+        .note-line,
+        .public-goal-row,
+        .notebook-goal-row {
+            min-height: 32px;
+            border-bottom: 1px solid rgba(190, 164, 126, 0.24);
+        }
+        .public-goal-title,
+        .notebook-goal-title {
+            color: #3e3326;
+            font-size: 15px;
+            font-weight: 700;
+            text-decoration-thickness: 1px;
+        }
+        .pill-button,
+        .want-button,
+        .together-button,
+        .public-list-actions .button,
+        .notebook-actions .button,
+        .page-control .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 0;
+            min-height: 26px;
+            border-radius: 999px;
+            padding: 4px 9px;
+            font-size: 12px;
+            line-height: 1.2;
+            white-space: nowrap;
+        }
+        .notebook-header {
+            border-bottom: 1px solid #e6d8c2;
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.46), transparent),
+                #fff4e2;
+        }
+        .notebook-title h3,
+        .notebook-header h3 {
+            color: #3d3021;
+            letter-spacing: 0;
+        }
+        .list-name {
+            color: #5a472f;
+        }
+        @media (max-width: 768px) {
+            header {
+                padding: 14px 16px;
+            }
+            header h1 {
+                font-size: 20px;
+                margin-bottom: 10px;
+            }
+            main {
+                padding: 18px 12px 36px;
+            }
+            .page-title {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 10px;
+            }
+            .page-title h2 {
+                font-size: 22px;
+            }
+            .site-nav {
+                align-items: stretch;
+                display: block;
+            }
+            .mobile-menu {
+                display: block;
+                position: relative;
+            }
+            .mobile-menu summary {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 44px;
+                min-height: 40px;
+                border: 1px solid #bca98f;
+                border-radius: 6px;
+                padding: 6px 10px;
+                background: #ffffff;
+                color: #3d3327;
+                cursor: pointer;
+                font-weight: 700;
+                list-style: none;
+            }
+            .mobile-menu summary::-webkit-details-marker {
+                display: none;
+            }
+            .mobile-menu-content {
+                display: none;
+                gap: 8px;
+                margin-top: 10px;
+            }
+            .mobile-menu[open] .mobile-menu-content {
+                display: grid;
+            }
+            .nav-left, .nav-right {
+                width: 100%;
+                align-items: stretch;
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+            .nav-right {
+                justify-content: flex-start;
+            }
+            nav a,
+            nav .button,
+            .user-menu summary {
+                box-sizing: border-box;
+                width: 100%;
+                min-height: 40px;
+                text-align: left;
+            }
+            .user-menu-panel {
+                position: static;
+                left: 0;
+                right: auto;
+                box-shadow: none;
+                margin-top: 8px;
+                width: auto;
+            }
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            .panel,
+            .item,
+            form.form-box {
+                padding: 14px;
+            }
+            .actions,
+            .filter-bar {
+                align-items: stretch;
+                flex-direction: column;
+            }
+            .actions .button,
+            .filter-bar .button,
+            .filter-bar input,
+            .filter-bar select,
+            .filter-bar button {
+                box-sizing: border-box;
+                width: 100%;
+                min-height: 42px;
+            }
+            input[type="text"],
+            input[type="number"],
+            input[type="date"],
+            input[type="file"],
+            select,
+            textarea {
+                width: 100%;
+                font-size: 16px;
+            }
+            .button,
+            .small-button {
+                min-height: 38px;
+                white-space: nowrap;
+            }
+            .compact-action-button,
+            .want-button,
+            .together-button {
+                min-width: 112px;
+                min-height: 38px;
+                white-space: nowrap;
+            }
+            .spread {
+                display: grid !important;
+                grid-template-columns: 1fr !important;
+                background: none !important;
+            }
+            .page {
+                min-height: auto !important;
+                padding: 14px !important;
+            }
+            .page:first-child {
+                border-bottom: 1px solid #eadfce;
+            }
+            .notebook-header,
+            .public-list-actions {
+                align-items: flex-start !important;
+                flex-direction: column !important;
+            }
+            .page-control {
+                justify-content: flex-start !important;
+                width: 100%;
+            }
+            .public-goal-row,
+            .notebook-goal-row {
+                grid-template-columns: 20px minmax(0, 1fr) !important;
+                align-items: start !important;
+            }
+            .public-goal-main,
+            .notebook-goal-main {
+                min-width: 0;
+            }
+            .public-goal-actions,
+            .notebook-actions {
+                grid-column: 2;
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: flex-start;
+                gap: 6px;
+                width: 100%;
+            }
+            .public-goal-actions form,
+            .want-form {
+                flex: 0 0 auto;
+                margin: 0;
+            }
+            .public-goal-actions .button,
+            .want-form .button {
+                width: auto;
+            }
+            .home-list-row,
+            .list-row {
+                grid-template-columns: 1fr;
+            }
+            .row-actions {
+                flex-wrap: wrap;
+                justify-content: flex-start;
+            }
+            .stat-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+        .mobile-bottom-nav {
+            display: none;
+        }
+        .mobile-user-label {
+            display: none;
+        }
+        @media (max-width: 768px) {
+            body {
+                background: #f5efe5;
+            }
+            header {
+                position: sticky;
+                top: 0;
+                z-index: 20;
+                border-bottom-color: #eadfce;
+                background: rgba(255, 250, 241, 0.96);
+                backdrop-filter: blur(10px);
+            }
+            header h1 {
+                margin: 0;
+                text-align: center;
+                font-size: 18px;
+            }
+            .mobile-user-label {
+                display: block;
+                margin-top: 4px;
+                color: #7b6a55;
+                font-size: 12px;
+                font-weight: 700;
+                text-align: center;
+            }
+            .site-nav {
+                display: none;
+            }
+            main {
+                padding: 18px 12px 136px;
+            }
+            .mobile-bottom-nav {
+                position: fixed;
+                left: 10px;
+                right: 10px;
+                bottom: 10px;
+                z-index: 30;
+                display: grid;
+                grid-template-columns: repeat(5, minmax(0, 1fr));
+                gap: 4px;
+                padding: 8px;
+                border: 1px solid #e0d2be;
+                border-radius: 20px;
+                background: rgba(255, 253, 248, 0.96);
+                box-shadow: 0 12px 32px rgba(77, 61, 42, 0.18);
+                backdrop-filter: blur(12px);
+            }
+            .mobile-bottom-nav a {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-height: 42px;
+                border: 0;
+                border-radius: 14px;
+                padding: 6px 4px;
+                background: transparent;
+                color: #5c4b38;
+                font-size: 12px;
+                font-weight: 700;
+                text-align: center;
+                text-decoration: none;
+                white-space: nowrap;
+            }
+            .mobile-bottom-nav a:hover {
+                background: #f1e7d8;
+            }
+            .mobile-bottom-nav a.is-active {
+                background: #eadbc5;
+                color: #3d3021;
+                box-shadow: inset 0 -2px 0 #8c6f48;
+            }
+            .button,
+            .small-button,
+            .compact-action-button,
+            .want-button,
+            .together-button,
+            .public-list-actions .button,
+            .notebook-actions .button,
+            .page-control .button {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: auto;
+                min-width: 0;
+                min-height: 30px;
+                border-radius: 999px;
+                padding: 5px 10px;
+                font-size: 12px;
+                line-height: 1.2;
+                white-space: nowrap;
+            }
+            .actions {
+                flex-direction: row;
+                align-items: center;
+            }
+            .actions .button,
+            .filter-bar .button {
+                width: auto;
+            }
+            .panel,
+            .item,
+            form.form-box,
+            .notebook-card,
+            .yearly-notebook {
+                border-color: #e2d3bd;
+                border-radius: 16px;
+                background: #fffdf8;
+                box-shadow: 0 8px 22px rgba(77, 61, 42, 0.07);
+            }
+            .spread {
+                display: block !important;
+                border-radius: 0 0 16px 16px;
+                background:
+                    linear-gradient(transparent 31px, rgba(197, 177, 145, 0.22) 32px),
+                    #fffdf8 !important;
+                background-size: 100% 32px !important;
+            }
+            .book-spread,
+            .spread {
+                box-shadow: none;
+            }
+            .book-spread::after,
+            .spread::after {
+                display: none;
+            }
+            .page {
+                min-height: auto !important;
+                padding: 16px 15px 18px !important;
+                background:
+                    linear-gradient(transparent 31px, rgba(197, 177, 145, 0.22) 32px),
+                    #fffaf0 !important;
+                background-size: 100% 32px !important;
+            }
+            .page:first-child {
+                border-bottom: 0 !important;
+                border-right: 0 !important;
+            }
+            .page:last-child {
+                border-left: 0 !important;
+            }
+            .page-label {
+                display: none;
+            }
+            .notebook-header {
+                padding: 13px 14px !important;
+                background: #fff7eb !important;
+            }
+            .notebook-title h3 {
+                font-size: 16px !important;
+            }
+            .notebook-progress,
+            .public-list-actions,
+            .page-control {
+                font-size: 12px;
+            }
+            .public-list-actions {
+                flex-direction: row !important;
+                align-items: center !important;
+                gap: 7px !important;
+                padding: 9px 14px !important;
+                overflow-x: auto;
+            }
+            .page-control {
+                flex: 1 0 100%;
+            }
+            .public-goal-row,
+            .notebook-goal-row {
+                grid-template-columns: 18px minmax(0, 1fr) !important;
+                gap: 7px !important;
+                padding: 8px 0 !important;
+            }
+            .public-goal-title,
+            .notebook-goal-title,
+            .row-title,
+            .item-title {
+                font-size: 15px;
+                line-height: 1.55;
+            }
+            .status-pill {
+                padding: 2px 7px;
+                font-size: 11px;
+            }
+            .public-goal-actions,
+            .notebook-actions {
+                grid-column: 2;
+                gap: 5px;
+                justify-content: flex-start;
+            }
+            .public-goal-actions .button,
+            .notebook-actions .button {
+                opacity: 0.82;
+            }
+            .book,
+            .notebook-card,
+            .yearly-notebook {
+                border-radius: 18px;
+                box-shadow: 0 12px 28px rgba(76, 57, 33, 0.12);
+            }
+            label {
+                font-size: 14px;
+            }
+            input[type="text"],
+            input[type="number"],
+            input[type="date"],
+            input[type="file"],
+            select,
+            textarea {
+                border-radius: 12px;
+                padding: 11px 12px;
+                background: #fffdf8;
+            }
+        }
+        body .book.notebook-card,
+        body .book.yearly-notebook {
+            border: 1px solid #d9c8ad;
+            border-radius: 18px;
+            background: #fbf3e4;
+            box-shadow:
+                0 18px 38px rgba(76, 57, 33, 0.13),
+                0 2px 0 rgba(255, 255, 255, 0.75) inset;
+        }
+        body .book .notebook-header {
+            border-bottom: 1px solid #e6d8c2;
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.46), transparent),
+                #fff4e2;
+        }
+        body .book .book-spread {
+            position: relative;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            background:
+                linear-gradient(90deg, transparent calc(50% - 22px), rgba(73, 50, 28, 0.08) calc(50% - 2px), rgba(255, 255, 255, 0.65) 50%, rgba(73, 50, 28, 0.08) calc(50% + 2px), transparent calc(50% + 22px));
+        }
+        body .book .book-spread::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: calc(50% - 1px);
+            width: 2px;
+            pointer-events: none;
+            background: linear-gradient(180deg, transparent, rgba(96, 72, 42, 0.2) 14%, rgba(96, 72, 42, 0.22) 86%, transparent);
+            box-shadow:
+                -10px 0 18px rgba(85, 60, 35, 0.08),
+                10px 0 18px rgba(85, 60, 35, 0.08);
+        }
+        body .book .book-page {
+            min-height: 300px;
+            padding: 22px 24px 24px;
+            background:
+                linear-gradient(transparent 31px, rgba(181, 154, 112, 0.18) 32px),
+                #fffaf0;
+            background-size: 100% 32px;
+            box-shadow: inset 0 0 28px rgba(88, 65, 35, 0.05);
+        }
+        body .book .book-page:first-child {
+            border-right: 1px solid rgba(177, 151, 112, 0.22);
+        }
+        body .book .book-page:last-child {
+            border-left: 1px solid rgba(255, 255, 255, 0.7);
+        }
+        body .book .note-line {
+            min-height: 32px;
+            border-bottom: 1px solid rgba(190, 164, 126, 0.24);
+        }
+        @media (max-width: 768px) {
+            body .book.notebook-card,
+            body .book.yearly-notebook {
+                border-radius: 18px;
+                box-shadow: 0 12px 28px rgba(76, 57, 33, 0.12);
+            }
+            body .book .book-spread {
+                display: block;
+                background:
+                    linear-gradient(transparent 31px, rgba(197, 177, 145, 0.22) 32px),
+                    #fffaf0;
+                background-size: 100% 32px;
+            }
+            body .book .book-spread::after {
+                display: none;
+            }
+            body .book .book-page {
+                min-height: auto;
+                padding: 16px 15px 18px;
+                background: transparent;
+                box-shadow: none;
+            }
+            body .book .book-page:first-child,
+            body .book .book-page:last-child {
+                border: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1><a href="{% url 'goals:home' %}" style="color: inherit; text-decoration: none;">叶えたいことリスト</a></h1>
+        <div class="mobile-user-label">
+            {% if user.is_authenticated %}
+                {{ user.profile.display_name|default:user.username }}さん
+            {% else %}
+                ゲスト
+            {% endif %}
+        </div>
+        <nav class="site-nav">
+            <details class="mobile-menu">
+                <summary>☰ メニュー</summary>
+                <div class="mobile-menu-content">
+                    <div class="nav-left">
+                        <a href="{% url 'goals:home' %}">ホーム</a>
+                        <a href="{% url 'goals:yearly_goal_list' %}">マイリスト一覧</a>
+                        <a href="{% url 'goals:public_goal_list' %}">みんなのマイリスト</a>
+                        <a href="{% url 'goals:following_list_page' %}">フォロー中</a>
+                        <a href="{% url 'goals:saved_list_page' %}">保存したリスト</a>
+                        <a href="{% url 'goals:together_requests' %}">一緒にやりたい</a>
+                        <a href="{% url 'goals:template_list' %}">テンプレート</a>
+                        <a href="{% url 'goals:idea_memo_list' %}">思いつきメモ</a>
+                    </div>
+                    <div class="nav-right">
+                    {% if user.is_authenticated %}
+                        <details class="user-menu">
+                            <summary>
+                                <span class="avatar">
+                                    {% if user.profile.icon %}
+                                        <img src="{{ user.profile.icon.url }}" alt="">
+                                    {% else %}
+                                        {{ user.profile.display_name|default:user.username|slice:":1" }}
+                                    {% endif %}
+                                </span>
+                                {% if user.profile.display_name %}
+                                    {{ user.profile.display_name }}さん ▼
+                                {% else %}
+                                    {{ user.username }}さん ▼
+                                {% endif %}
+                            </summary>
+                            <div class="user-menu-panel">
+                                <a href="{% url 'goals:my_profile' %}">プロフィール</a>
+                                <form method="post" action="{% url 'logout' %}">
+                                    {% csrf_token %}
+                                    <button class="button" type="submit">ログアウト</button>
+                                </form>
+                            </div>
+                        </details>
+                    {% else %}
+                        <a href="{% url 'login' %}">ログイン</a>
+                        <a href="{% url 'goals:signup' %}">新規登録</a>
+                    {% endif %}
+                    </div>
+                </div>
+            </details>
+        </nav>
+    </header>
+    <main>
+        {% if messages %}
+            <div class="messages">
+                {% for message in messages %}
+                    <p class="{% if '達成おめでとう' in message %}confetti-message{% endif %}">{{ message }}</p>
+                {% endfor %}
+            </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+    <nav class="mobile-bottom-nav" aria-label="スマホ用メニュー">
+        <a class="{% if request.resolver_match.url_name == 'home' %}is-active{% endif %}" href="{% url 'goals:home' %}">ホーム</a>
+        <a class="{% if request.resolver_match.url_name == 'yearly_goal_list' or request.resolver_match.url_name == 'my_list_detail' or request.resolver_match.url_name == 'my_list_add' or request.resolver_match.url_name == 'my_list_edit' or request.resolver_match.url_name == 'yearly_goal_detail' %}is-active{% endif %}" href="{% url 'goals:yearly_goal_list' %}">マイリスト</a>
+        <a class="{% if request.resolver_match.url_name == 'public_goal_list' or request.resolver_match.url_name == 'public_list_detail' %}is-active{% endif %}" href="{% url 'goals:public_goal_list' %}">みんな</a>
+        <a class="{% if request.resolver_match.url_name == 'template_list' or request.resolver_match.url_name == 'template_detail' %}is-active{% endif %}" href="{% url 'goals:template_list' %}">テンプレート</a>
+        {% if user.is_authenticated %}
+            <a class="{% if request.resolver_match.url_name == 'my_profile' or request.resolver_match.url_name == 'edit_profile' %}is-active{% endif %}" href="{% url 'goals:my_profile' %}">マイページ</a>
+        {% else %}
+            <a class="{% if request.resolver_match.url_name == 'login' %}is-active{% endif %}" href="{% url 'login' %}">ログイン</a>
+        {% endif %}
+    </nav>
+</body>
+</html>

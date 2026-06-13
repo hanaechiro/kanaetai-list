@@ -1,0 +1,53 @@
+{% extends "goals/base.html" %}
+
+{% block title %}一緒にやりたいリクエスト - 叶えたいことリスト{% endblock %}
+
+{% block content %}
+<div class="page-title">
+    <h2>一緒にやりたいリクエスト</h2>
+</div>
+
+<section class="panel">
+    <h3>届いたリクエスト</h3>
+    {% for request_item in received_requests %}
+        <article class="item">
+            <div class="item-title">{{ request_item.list_item.title }}</div>
+            <p class="meta">
+                {{ request_item.requester.profile.display_name|default:request_item.requester.username }}さん /
+                {{ request_item.get_status_display }} /
+                {{ request_item.created_at|date:"Y/m/d H:i" }}
+            </p>
+            {% if request_item.status == "pending" %}
+                <div class="actions">
+                    <form method="post" action="{% url 'goals:respond_together_request' request_item.pk 'accepted' %}">
+                        {% csrf_token %}
+                        <button class="button small-button" type="submit">承認</button>
+                    </form>
+                    <form method="post" action="{% url 'goals:respond_together_request' request_item.pk 'rejected' %}">
+                        {% csrf_token %}
+                        <button class="button small-button danger" type="submit">拒否</button>
+                    </form>
+                </div>
+            {% endif %}
+        </article>
+    {% empty %}
+        <p class="notice">届いたリクエストはまだありません。</p>
+    {% endfor %}
+</section>
+
+<section class="panel" style="margin-top: 18px;">
+    <h3>送ったリクエスト</h3>
+    {% for request_item in sent_requests %}
+        <article class="item">
+            <div class="item-title">{{ request_item.list_item.title }}</div>
+            <p class="meta">
+                {{ request_item.receiver.profile.display_name|default:request_item.receiver.username }}さん /
+                {{ request_item.get_status_display }} /
+                {{ request_item.created_at|date:"Y/m/d H:i" }}
+            </p>
+        </article>
+    {% empty %}
+        <p class="notice">送ったリクエストはまだありません。</p>
+    {% endfor %}
+</section>
+{% endblock %}

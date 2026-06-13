@@ -1,0 +1,24 @@
+{% extends "goals/base.html" %}
+
+{% block title %}今週やること - 叶えたいことリスト{% endblock %}
+
+{% block content %}
+<div class="page-title">
+    <div>
+        <h2>今週やること</h2>
+        <p class="meta">{{ selected_week|date:"Y年n月j日" }}〜{{ week_end|date:"n月j日" }}</p>
+    </div>
+    <a class="button" href="{% url 'goals:weekly_goal_add' %}">追加する</a>
+</div>
+
+<div class="filter-bar">
+    <a class="button small-button" href="?week={{ previous_week|date:'Y-m-d' }}">前の週</a>
+    <a class="button small-button" href="?week={{ next_week|date:'Y-m-d' }}">次の週</a>
+</div>
+
+{% if task_count > 3 %}
+    <p class="notice">今週のTODOが多めです。大事な3つに絞ると進めやすいです。</p>
+{% endif %}
+
+{% include "goals/partials/weekly_goals.html" with goals=goals show_actions=True %}
+{% endblock %}

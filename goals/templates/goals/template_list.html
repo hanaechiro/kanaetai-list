@@ -1,0 +1,50 @@
+{% extends "goals/base.html" %}
+
+{% block title %}テンプレート - 叶えたいことリスト{% endblock %}
+
+{% block content %}
+<style>
+    .template-list-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+        align-items: stretch;
+    }
+    .template-list-card {
+        display: grid;
+        align-content: start;
+        gap: 8px;
+        min-height: 0;
+    }
+    .template-title-link {
+        color: #3d3021;
+        text-decoration: none;
+        text-underline-offset: 4px;
+        text-decoration-thickness: 1px;
+    }
+    .template-title-link:hover,
+    .template-title-link:focus,
+    .template-title-link:active {
+        color: #6f5634;
+        text-decoration: underline;
+    }
+    .template-list-card h3 {
+        margin: 0;
+    }
+</style>
+
+<div class="page-title">
+    <h2>テンプレート</h2>
+</div>
+
+<section class="template-list-grid">
+    {% for template in templates %}
+        <article class="panel template-list-card">
+            <h3>
+                <a class="template-title-link" href="{% url 'goals:template_detail' template.slug %}">{{ template.title }}</a>
+            </h3>
+            <p class="meta">目標 {{ template.target_count }}件 / サンプル {{ template.items|length }}件</p>
+        </article>
+    {% endfor %}
+</section>
+{% endblock %}

@@ -1,0 +1,99 @@
+{% extends "goals/base.html" %}
+
+{% block title %}{{ title }} - 叶えたいことリスト{% endblock %}
+
+{% block content %}
+<style>
+    .form-title-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: start;
+        gap: 14px;
+        margin-bottom: 16px;
+    }
+    .form-title-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+    }
+    .form-title-actions .button {
+        white-space: nowrap;
+    }
+    .form-box {
+        overflow: hidden;
+    }
+    .form-box input,
+    .form-box select,
+    .form-box textarea {
+        box-sizing: border-box;
+        max-width: 100%;
+    }
+    .form-box input[type="date"] {
+        width: 100%;
+        min-width: 0;
+    }
+    .form-box p {
+        min-width: 0;
+    }
+    .form-box p:has(input[type="checkbox"]) {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .form-box p:has(input[type="checkbox"]) label {
+        margin: 0;
+    }
+    .form-box p:has(input[type="checkbox"]) input[type="checkbox"] {
+        margin: 0;
+    }
+    .hidden-completion-date {
+        display: none;
+    }
+</style>
+
+<div class="page-title{% if actions_in_title %} form-title-row{% endif %}">
+    <h2>{{ title }}</h2>
+    {% if actions_in_title %}
+        <div class="form-title-actions">
+            <button class="button" type="submit" form="main-form">保存</button>
+            <a class="button" href="{{ cancel_url }}">キャンセル</a>
+        </div>
+    {% endif %}
+</div>
+
+<form id="main-form" class="form-box" method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.as_p }}
+    {% if not actions_in_title %}
+        <div class="actions">
+            <button class="button" type="submit">保存</button>
+            <a class="button" href="{{ cancel_url }}">キャンセル</a>
+        </div>
+    {% endif %}
+</form>
+
+<script>
+    const doneControl = document.getElementById("id_is_done");
+    const completedDateInput = document.getElementById("id_completed_date");
+
+    if (doneControl && completedDateInput) {
+        const completedDateRow = completedDateInput.closest("p");
+        const toggleCompletedDate = () => {
+            const isCompleted = doneControl.type === "checkbox"
+                ? doneControl.checked
+                : ["1", "true", "True"].includes(doneControl.value);
+
+            if (isCompleted) {
+                completedDateRow?.classList.remove("hidden-completion-date");
+            } else {
+                completedDateInput.value = "";
+                completedDateRow?.classList.add("hidden-completion-date");
+            }
+        };
+
+        doneControl.addEventListener("change", toggleCompletedDate);
+        toggleCompletedDate();
+    }
+</script>
+{% endblock %}

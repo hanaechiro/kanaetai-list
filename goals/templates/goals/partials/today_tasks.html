@@ -1,0 +1,17 @@
+{% for task in tasks %}
+    <article class="item {% if task.is_done %}done{% endif %}">
+        <div class="item-title">{{ task.title }}</div>
+        <p class="meta">{{ task.scheduled_date|date:"Y年n月j日" }}</p>
+        <div class="actions">
+            <a class="button" href="{% url 'goals:toggle_done' 'today' task.pk %}">
+                {% if task.is_done %}未完了に戻す{% else %}完了にする{% endif %}
+            </a>
+            {% if show_actions %}
+                <a class="button" href="{% url 'goals:today_task_edit' task.pk %}">編集</a>
+                <a class="button danger" href="{% url 'goals:today_task_delete' task.pk %}">削除</a>
+            {% endif %}
+        </div>
+    </article>
+{% empty %}
+    <p class="notice">今日TODOはまだありません。</p>
+{% endfor %}
