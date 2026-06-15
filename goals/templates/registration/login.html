@@ -3,14 +3,66 @@
 {% block title %}ログイン - 叶えたいことリスト{% endblock %}
 
 {% block content %}
+<style>
+    .login-form {
+        max-width: 460px;
+        margin: 0 auto;
+    }
+    .login-form p {
+        display: grid;
+        gap: 6px;
+        margin: 0 0 14px;
+    }
+    .login-form label {
+        color: #5f5144;
+        font-weight: 700;
+    }
+    .login-form input[type="text"],
+    .login-form input[type="password"] {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 46px;
+        border: 1px solid #d8c7ae;
+        border-radius: 12px;
+        background: #fffaf0;
+        padding: 11px 12px;
+        color: #3d3021;
+        font-size: 16px;
+        line-height: 1.4;
+    }
+    .login-actions {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        justify-content: flex-end;
+        margin-top: 18px;
+    }
+    .login-actions .button {
+        min-width: 116px;
+        justify-content: center;
+    }
+    @media (max-width: 768px) {
+        .login-form {
+            max-width: none;
+        }
+        .login-actions {
+            justify-content: stretch;
+        }
+        .login-actions .button {
+            flex: 1;
+            width: auto;
+        }
+    }
+</style>
+
 <div class="page-title">
     <h2>ログイン</h2>
 </div>
 
-<form class="form-box" method="post">
+<form class="form-box login-form" method="post">
     {% csrf_token %}
     {{ form.as_p }}
-    <div class="actions">
+    <div class="login-actions">
         <button class="button" type="submit">ログイン</button>
         <a class="button" href="{% url 'goals:signup' %}">新規登録</a>
     </div>

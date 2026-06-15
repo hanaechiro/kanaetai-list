@@ -6,7 +6,7 @@
 <style>
     .cover-page {
         display: grid;
-        gap: 18px;
+        gap: 20px;
     }
     .note-cover {
         position: relative;
@@ -17,7 +17,7 @@
             radial-gradient(circle at 20% 12%, rgba(255, 255, 255, 0.7), transparent 28%),
             linear-gradient(135deg, rgba(136, 104, 65, 0.08), transparent 38%),
             #fff6e6;
-        padding: 18px;
+        padding: 16px;
         box-shadow:
             0 18px 42px rgba(76, 57, 33, 0.13),
             inset 0 0 0 1px rgba(255, 255, 255, 0.55);
@@ -34,19 +34,19 @@
         position: relative;
         display: grid;
         grid-template-columns: auto minmax(0, 1fr) auto;
-        gap: 14px;
+        gap: 12px;
         align-items: center;
     }
     .cover-avatar {
-        width: 68px;
-        height: 68px;
+        width: 62px;
+        height: 62px;
         border: 4px solid #fffaf1;
         box-shadow: 0 8px 18px rgba(83, 62, 36, 0.13);
     }
     .cover-name {
         margin: 0;
         color: #3d3021;
-        font-size: 24px;
+        font-size: 22px;
         line-height: 1.2;
     }
     .cover-username {
@@ -57,7 +57,7 @@
     }
     .cover-bio {
         position: relative;
-        margin: 8px 0 0;
+        margin: 6px 0 0;
         max-width: 680px;
         color: #5f4d38;
         line-height: 1.6;
@@ -162,7 +162,7 @@
     }
     .activity-summary {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 0;
         border: 1px solid #e5d8c4;
         border-radius: 16px;
@@ -175,7 +175,7 @@
     .activity-summary span {
         display: grid;
         gap: 4px;
-        min-height: 72px;
+        min-height: 68px;
         place-items: center;
         padding: 12px;
         text-align: center;
@@ -196,6 +196,7 @@
         border-radius: 16px;
         background: #fffdf8;
         padding: 0;
+        overflow: hidden;
         box-shadow: 0 8px 18px rgba(76, 57, 33, 0.06);
     }
     .more-menu summary {
@@ -209,10 +210,43 @@
         display: none;
     }
     .more-menu-links {
+        display: grid;
+        padding: 0;
+    }
+    .menu-row,
+    .menu-row-button {
         display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        padding: 0 16px 16px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        width: 100%;
+        box-sizing: border-box;
+        border: 0;
+        border-top: 1px solid #eadfce;
+        border-radius: 0;
+        background: transparent;
+        color: #3d3021;
+        padding: 14px 16px;
+        font: inherit;
+        font-weight: 700;
+        text-align: left;
+        text-decoration: none;
+        cursor: pointer;
+    }
+    .menu-row:hover,
+    .menu-row:focus,
+    .menu-row-button:hover,
+    .menu-row-button:focus {
+        background: #fff8ec;
+    }
+    .menu-row::after,
+    .menu-row-button::after {
+        content: ">";
+        color: #9a8466;
+        font-weight: 700;
+    }
+    .menu-form {
+        margin: 0;
     }
     .public-profile-lists {
         display: grid;
@@ -225,7 +259,7 @@
         }
         .note-cover {
             border-radius: 18px;
-            padding: 16px;
+            padding: 14px;
         }
         .cover-profile {
             grid-template-columns: auto minmax(0, 1fr) auto;
@@ -234,11 +268,11 @@
             gap: 12px;
         }
         .cover-avatar {
-            width: 60px;
-            height: 60px;
+            width: 56px;
+            height: 56px;
         }
         .cover-name {
-            font-size: 21px;
+            font-size: 20px;
         }
         .cover-bio {
             text-align: left;
@@ -248,7 +282,12 @@
         }
         .section-heading {
             align-items: flex-start;
-            flex-direction: column;
+            flex-direction: row;
+            justify-content: space-between;
+        }
+        .section-heading .button {
+            min-width: 112px;
+            justify-content: center;
         }
         .my-list-card {
             border-radius: 18px;
@@ -272,17 +311,8 @@
         .activity-summary span:nth-child(2n) {
             border-right: 0;
         }
-        .activity-summary span:nth-last-child(-n+2) {
+        .activity-summary span {
             border-bottom: 0;
-        }
-        .more-menu-links {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-        .more-menu-links .button,
-        .more-menu-links form,
-        .more-menu-links button {
-            width: 100%;
         }
     }
 </style>
@@ -312,8 +342,6 @@
         </section>
 
         <section class="activity-summary" aria-label="活動サマリー">
-            <span>達成 <strong>{{ profile_stats.done_item_count }}</strong></span>
-            <span>保存 <strong>{{ profile_stats.saved_count }}</strong></span>
             <span>フォロー <strong>{{ profile_stats.following_count }}</strong></span>
             <span>フォロワー <strong>{{ profile_stats.followers_count }}</strong></span>
         </section>
@@ -356,14 +384,14 @@
         <details class="more-menu">
             <summary>その他メニュー</summary>
             <div class="more-menu-links">
-                <a class="button small-button pill-button" href="{% url 'goals:saved_list_page' %}">保存したリスト</a>
-                <a class="button small-button pill-button" href="{% url 'goals:following_list_page' %}">フォロー中</a>
-                <a class="button small-button pill-button" href="{% url 'goals:template_list' %}">テンプレート</a>
-                <a class="button small-button pill-button" href="{% url 'goals:idea_memo_list' %}">思いつきメモ</a>
-                <a class="button small-button pill-button" href="{% url 'goals:together_requests' %}">一緒にやりたい</a>
-                <form method="post" action="{% url 'logout' %}">
+                <a class="menu-row" href="{% url 'goals:saved_list_page' %}">保存したリスト</a>
+                <a class="menu-row" href="{% url 'goals:following_list_page' %}">フォロー中</a>
+                <a class="menu-row" href="{% url 'goals:template_list' %}">テンプレート</a>
+                <a class="menu-row" href="{% url 'goals:idea_memo_list' %}">思いつきメモ</a>
+                <a class="menu-row" href="{% url 'goals:together_requests' %}">一緒にやりたい</a>
+                <form class="menu-form" method="post" action="{% url 'logout' %}">
                     {% csrf_token %}
-                    <button class="button small-button pill-button" type="submit">ログアウト</button>
+                    <button class="menu-row-button" type="submit">ログアウト</button>
                 </form>
             </div>
         </details>
@@ -399,8 +427,6 @@
     </section>
 
     <section class="activity-summary" aria-label="活動サマリー" style="margin-top: 18px;">
-        <span>達成 <strong>{{ profile_stats.done_item_count }}</strong></span>
-        <span>保存 <strong>{{ profile_stats.saved_count }}</strong></span>
         <span>フォロー <strong>{{ profile_stats.following_count }}</strong></span>
         <span>フォロワー <strong>{{ profile_stats.followers_count }}</strong></span>
     </section>
