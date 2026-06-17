@@ -38,7 +38,7 @@ if allowed_hosts:
 elif render_external_hostname:
     ALLOWED_HOSTS = [render_external_hostname, 'localhost', '127.0.0.1']
 else:
-    ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', '192.168.11.12']
 
 CSRF_TRUSTED_ORIGINS = []
 if render_external_hostname:
@@ -173,4 +173,4 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = '/'
-LOGOUT_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/accounts/login/'

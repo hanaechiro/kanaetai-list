@@ -1,0 +1,356 @@
+{% extends "goals/base.html" %}
+
+{% block title %}プロフィール編集 - 叶えたいことリスト{% endblock %}
+
+{% block content %}
+<style>
+    .profile-form-title {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+    .profile-form-title h2 {
+        margin: 0;
+    }
+    .profile-form-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+    }
+    .profile-form-actions .button {
+        white-space: nowrap;
+    }
+    .profile-icon-editor {
+        display: grid;
+        justify-items: center;
+        gap: 12px;
+        text-align: center;
+    }
+    .profile-icon-preview {
+        width: 132px;
+        height: 132px;
+        border: 4px solid #fffaf1;
+        box-shadow: 0 8px 18px rgba(83, 62, 36, 0.13);
+    }
+    .profile-icon-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        justify-content: center;
+    }
+    .crop-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: none;
+        background: #111111;
+        color: #fffdf8;
+    }
+    .crop-modal.is-open {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+    }
+    .crop-topbar {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        padding: calc(env(safe-area-inset-top, 0px) + 14px) 16px 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+    }
+    .crop-topbar h3 {
+        margin: 0;
+        text-align: center;
+        font-size: 16px;
+    }
+    .crop-topbar button {
+        border: 0;
+        background: transparent;
+        color: #fffdf8;
+        font: inherit;
+        font-weight: 800;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+    .crop-stage {
+        position: relative;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        min-height: 320px;
+        touch-action: none;
+    }
+    .crop-stage::before {
+        content: "";
+        position: absolute;
+        width: min(78vw, 340px);
+        aspect-ratio: 1;
+        border: 2px solid rgba(255, 255, 255, 0.88);
+        border-radius: 50%;
+        box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.54);
+        pointer-events: none;
+        z-index: 2;
+    }
+    #crop-canvas {
+        width: min(92vw, 420px);
+        height: min(92vw, 420px);
+        max-height: 62vh;
+        touch-action: none;
+    }
+    .crop-hint {
+        padding: 12px 18px calc(env(safe-area-inset-bottom, 0px) + 16px);
+        background: rgba(0, 0, 0, 0.52);
+        color: rgba(255, 253, 248, 0.82);
+        font-size: 13px;
+        font-weight: 700;
+        text-align: center;
+    }
+    @media (max-width: 768px) {
+        .profile-form-title {
+            grid-template-columns: minmax(0, 1fr) auto;
+        }
+        .profile-form-actions {
+            flex-wrap: nowrap;
+        }
+        .profile-form-actions .button {
+            padding-left: 10px;
+            padding-right: 10px;
+        }
+        .profile-icon-preview {
+            width: 120px;
+            height: 120px;
+        }
+    }
+</style>
+
+<div class="page-title profile-form-title">
+    <h2>プロフィール編集</h2>
+    <div class="profile-form-actions">
+        <button class="button pill-button" type="submit" form="profile-form">保存</button>
+        <a class="button pill-button" href="{% url 'goals:my_profile' %}">キャンセル</a>
+    </div>
+</div>
+
+<form id="profile-form" class="app-form-card" method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {{ form.avatar_crop_data }}
+
+    <section class="app-field">
+        <span class="app-label">プロフィール画像</span>
+        <div class="profile-icon-editor">
+            <span class="avatar large profile-icon-preview" id="profile-icon-preview">
+                {% if profile.icon %}
+                    <img src="{{ profile.icon.url }}" alt="">
+                {% else %}
+                    {{ profile.display_name|default:request.user.username|slice:":1" }}
+                {% endif %}
+            </span>
+            <div class="profile-icon-controls">
+                <label class="app-file-button" for="{{ form.icon.id_for_label }}">画像を変更</label>
+                <input
+                    class="app-file-input"
+                    type="file"
+                    name="{{ form.icon.html_name }}"
+                    id="{{ form.icon.id_for_label }}"
+                    accept="image/*"
+                >
+                {% if profile.icon %}
+                    <label class="app-text-link">
+                        <input class="app-file-input" type="checkbox" name="icon-clear" id="icon-clear_id">
+                        画像を削除
+                    </label>
+                {% endif %}
+            </div>
+        </div>
+        {% for error in form.icon.errors %}
+            <p class="app-error">{{ error }}</p>
+        {% endfor %}
+    </section>
+
+    <section class="app-field">
+        <label class="app-label" for="{{ form.display_name.id_for_label }}">表示名</label>
+        {{ form.display_name }}
+        {% for error in form.display_name.errors %}
+            <p class="app-error">{{ error }}</p>
+        {% endfor %}
+    </section>
+
+    <section class="app-field">
+        <label class="app-label" for="{{ form.bio.id_for_label }}">自己紹介</label>
+        {{ form.bio }}
+        {% for error in form.bio.errors %}
+            <p class="app-error">{{ error }}</p>
+        {% endfor %}
+    </section>
+</form>
+
+<div class="crop-modal" id="crop-modal" aria-hidden="true">
+    <div class="crop-topbar">
+        <button type="button" id="crop-cancel">キャンセル</button>
+        <h3>画像を調整</h3>
+        <button type="button" id="crop-apply">決定</button>
+    </div>
+    <div class="crop-stage" id="crop-stage">
+        <canvas id="crop-canvas" width="720" height="720"></canvas>
+    </div>
+    <p class="crop-hint">ドラッグで位置調整、ピンチまたはホイールで拡大縮小できます</p>
+</div>
+
+<script>
+    (() => {
+        const fileInput = document.getElementById("{{ form.icon.id_for_label }}");
+        const cropInput = document.getElementById("{{ form.avatar_crop_data.id_for_label }}");
+        const modal = document.getElementById("crop-modal");
+        const stage = document.getElementById("crop-stage");
+        const canvas = document.getElementById("crop-canvas");
+        const ctx = canvas.getContext("2d");
+        const applyButton = document.getElementById("crop-apply");
+        const cancelButton = document.getElementById("crop-cancel");
+        const preview = document.getElementById("profile-icon-preview");
+        let image = null;
+        let position = { x: 0, y: 0 };
+        let zoomValue = 1;
+        const pointers = new Map();
+        let drag = null;
+        let pinch = null;
+
+        function boundsFor(scale) {
+            const size = canvas.width;
+            const drawWidth = image.naturalWidth * scale;
+            const drawHeight = image.naturalHeight * scale;
+            return {
+                x: Math.max((drawWidth - size) / 2, 0),
+                y: Math.max((drawHeight - size) / 2, 0),
+            };
+        }
+
+        function clampPosition(scale) {
+            const bounds = boundsFor(scale);
+            position.x = Math.min(Math.max(position.x, -bounds.x), bounds.x);
+            position.y = Math.min(Math.max(position.y, -bounds.y), bounds.y);
+        }
+
+        function setZoom(nextZoom) {
+            zoomValue = Math.min(Math.max(nextZoom, 1), 4);
+            drawCrop();
+        }
+
+        function drawCrop() {
+            if (!image) return;
+            const size = canvas.width;
+            ctx.clearRect(0, 0, size, size);
+            ctx.fillStyle = "#111111";
+            ctx.fillRect(0, 0, size, size);
+            const baseScale = Math.max(size / image.naturalWidth, size / image.naturalHeight);
+            const scale = baseScale * zoomValue;
+            clampPosition(scale);
+            const drawWidth = image.naturalWidth * scale;
+            const drawHeight = image.naturalHeight * scale;
+            const x = (size - drawWidth) / 2 + position.x;
+            const y = (size - drawHeight) / 2 + position.y;
+            ctx.drawImage(image, x, y, drawWidth, drawHeight);
+        }
+
+        function openCrop(src) {
+            image = new Image();
+            image.onload = () => {
+                zoomValue = 1;
+                position = { x: 0, y: 0 };
+                drawCrop();
+                modal.classList.add("is-open");
+                modal.setAttribute("aria-hidden", "false");
+            };
+            image.src = src;
+        }
+
+        fileInput?.addEventListener("change", () => {
+            const file = fileInput.files && fileInput.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => openCrop(event.target.result);
+            reader.readAsDataURL(file);
+        });
+
+        stage.addEventListener("pointerdown", (event) => {
+            if (!image) return;
+            stage.setPointerCapture(event.pointerId);
+            pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+            if (pointers.size === 1) {
+                drag = { x: event.clientX, y: event.clientY, startX: position.x, startY: position.y };
+                pinch = null;
+            } else if (pointers.size === 2) {
+                const points = Array.from(pointers.values());
+                pinch = {
+                    distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y),
+                    zoom: zoomValue,
+                };
+                drag = null;
+            }
+        });
+        stage.addEventListener("pointermove", (event) => {
+            if (!image || !pointers.has(event.pointerId)) return;
+            pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+            const canvasRect = canvas.getBoundingClientRect();
+            const ratio = canvas.width / canvasRect.width;
+            if (pointers.size >= 2 && pinch) {
+                const points = Array.from(pointers.values()).slice(0, 2);
+                const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+                setZoom(pinch.zoom * (distance / pinch.distance));
+                return;
+            }
+            if (drag) {
+                position.x = drag.startX + (event.clientX - drag.x) * ratio;
+                position.y = drag.startY + (event.clientY - drag.y) * ratio;
+                drawCrop();
+            }
+        });
+        function endPointer(event) {
+            pointers.delete(event.pointerId);
+            drag = null;
+            pinch = null;
+            if (pointers.size === 1) {
+                const point = Array.from(pointers.values())[0];
+                drag = { x: point.x, y: point.y, startX: position.x, startY: position.y };
+            }
+        }
+        stage.addEventListener("pointerup", endPointer);
+        stage.addEventListener("pointercancel", endPointer);
+        stage.addEventListener("wheel", (event) => {
+            if (!image) return;
+            event.preventDefault();
+            const delta = event.deltaY < 0 ? 0.08 : -0.08;
+            setZoom(zoomValue + delta);
+        }, { passive: false });
+
+        applyButton.addEventListener("click", () => {
+            drawCrop();
+            const output = document.createElement("canvas");
+            output.width = 512;
+            output.height = 512;
+            const outputCtx = output.getContext("2d");
+            outputCtx.drawImage(canvas, 0, 0, output.width, output.height);
+            const dataUrl = output.toDataURL("image/jpeg", 0.9);
+            cropInput.value = dataUrl;
+            preview.innerHTML = "";
+            const img = document.createElement("img");
+            img.src = dataUrl;
+            img.alt = "";
+            preview.appendChild(img);
+            modal.classList.remove("is-open");
+            modal.setAttribute("aria-hidden", "true");
+        });
+
+        cancelButton.addEventListener("click", () => {
+            fileInput.value = "";
+            cropInput.value = "";
+            modal.classList.remove("is-open");
+            modal.setAttribute("aria-hidden", "true");
+        });
+    })();
+</script>
+{% endblock %}

@@ -1,0 +1,23 @@
+<div class="spread book-spread">
+    <div class="page book-page">
+        <p class="page-label">左ページ</p>
+        <div class="goal-list" data-page-side="left">
+            {% for goal in left_goals %}
+                {% include row_template with goal=goal group=group hide_item_actions=hide_item_actions %}
+            {% empty %}
+                <p class="meta">このページにはまだ項目がありません。</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="page book-page">
+        <p class="page-label">右ページ</p>
+        <div class="goal-list" data-page-side="right">
+            {% for goal in right_goals %}
+                {% include row_template with goal=goal group=group hide_item_actions=hide_item_actions %}
+            {% empty %}
+                <p class="meta">このページにはまだ項目がありません。</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>

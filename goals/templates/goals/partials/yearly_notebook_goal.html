@@ -1,9 +1,9 @@
-<div class="notebook-goal-row note-line {% if goal.is_done %}done{% endif %}">
+<div class="list-item-row notebook-goal-row note-line {% if goal.is_done %}done{% endif %}">
     <form class="notebook-check-form" method="post" action="{% url 'goals:toggle_done' 'yearly' goal.pk %}">
         {% csrf_token %}
         <input type="hidden" name="is_done" value="0">
         <input
-            class="goal-check"
+            class="goal-check app-checkbox"
             type="checkbox"
             name="is_done"
             value="1"

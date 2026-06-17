@@ -5,150 +5,47 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from goals.models import Profile, YearPlan, YearlyGoal
+from goals.models import Follow, LikeList, Profile, SavedList, YearPlan, YearlyGoal
 
 
-CATEGORY_BY_TITLE = {
-    "沖縄旅行に行く": "travel",
-    "京都でひとり旅をする": "travel",
-    "富士山を見に行く": "travel",
-    "浴衣を着て花火大会に行く": "hobby",
-    "朝カフェで読書する": "hobby",
-    "編み物作品を10個完成させる": "hobby",
-    "月5万円貯金する": "money",
-    "本を100冊読む": "study",
-    "英語で日記を書けるようになる": "study",
-    "朝活を習慣にする": "health",
-    "東京で行きたいカフェを20店巡る": "hobby",
-    "部屋をかわいく整える": "other",
-    "週3回ストレッチする": "health",
-    "副業の売上を作る": "work",
-    "資格の勉強を始める": "study",
-}
-
-DEFAULT_CATEGORY = "other"
-
-
-def category_for(title):
-    for keyword, category in CATEGORY_BY_TITLE.items():
-        if keyword in title or title in keyword:
-            return category
-    if any(word in title for word in ["旅行", "旅", "沖縄", "京都", "ホテル", "温泉", "富士山"]):
-        return "travel"
-    if any(word in title for word in ["美容", "メイク", "ネイル", "髪", "スキンケア"]):
-        return "beauty"
-    if any(word in title for word in ["本", "英語", "資格", "勉強", "読書", "日記"]):
-        return "study"
-    if any(word in title for word in ["仕事", "副業", "ポートフォリオ", "売上"]):
-        return "work"
-    if any(word in title for word in ["編み物", "カフェ", "花火", "美術館", "写真", "映画"]):
-        return "hobby"
-    if any(word in title for word in ["朝活", "ストレッチ", "ヨガ", "散歩", "健康"]):
-        return "health"
-    if any(word in title for word in ["貯金", "家計", "投資", "お金"]):
-        return "money"
-    return DEFAULT_CATEGORY
-
+CATEGORIES = ["travel", "beauty", "study", "work", "hobby", "health", "money", "other"]
 
 DEMO_USERS = [
     {
-        "username": "はな",
-        "display_name": "はな",
-        "bio": "やりたいことを少しずつ形にしているマイリストです。",
-        "password": "hanae2816",
+        "username": "hana",
+        "display_name": "Hana",
+        "bio": "行きたい場所と作りたいものを、少しずつノートに集めています。",
         "lists": [
             {
                 "title": "2026年やりたいこと",
                 "target_count": 100,
                 "is_public": True,
                 "items": [
-                    "沖縄旅行に行く",
-                    "京都でひとり旅をする",
-                    "本を100冊読む",
-                    "英語で日記を書けるようになる",
-                    "月5万円貯金する",
-                    "朝活を習慣にする",
-                    "編み物作品を10個完成させる",
-                    "富士山を見に行く",
-                    "カフェ巡りをする",
-                    "美術館に行く",
-                    "資格の勉強を始める",
-                    "部屋をかわいく整える",
-                    "新しいレシピを20個作る",
-                    "週3回ストレッチする",
-                    "副業の売上を作る",
-                    "写真アルバムを作る",
-                    "家計簿を3か月続ける",
-                    "お気に入りの香水を見つける",
-                    "海の見えるホテルに泊まる",
-                    "手帳を毎週見返す",
+                    ("沖縄旅行に行く", "travel"),
+                    ("本を100冊読む", "study"),
+                    ("月5万円貯金する", "money"),
+                    ("朝活を習慣にする", "health"),
+                    ("編み物作品を10個完成させる", "hobby"),
+                    ("富士山を見に行く", "travel"),
+                    ("カフェ巡りをする", "hobby"),
+                    ("資格の勉強を始める", "study"),
+                    ("部屋をかわいく整える", "other"),
+                    ("副業の売上を作る", "work"),
                 ],
             },
             {
                 "title": "編み物で作りたいもの",
                 "target_count": 30,
-                "is_public": False,
-                "items": [
-                    "春色のショールを編む",
-                    "自分用のカーディガンを完成させる",
-                    "友だちに小さなポーチを贈る",
-                    "余り糸でコースターを作る",
-                    "丸ヨークセーターに挑戦する",
-                    "編み込み模様のミトンを作る",
-                    "夏用バッグを編む",
-                    "お気に入り糸の見本帳を作る",
-                    "ベビー用ブランケットを編む",
-                    "作品写真をきれいに撮る",
-                    "編み図を1つ自作する",
-                    "毛糸収納を整える",
-                ],
-            },
-        ],
-    },
-    {
-        "username": "yui",
-        "display_name": "Yui",
-        "bio": "旅と季節のイベントを集めています。",
-        "password": "demo-pass-123",
-        "lists": [
-            {
-                "title": "夏にやりたいこと",
-                "target_count": 30,
                 "is_public": True,
                 "items": [
-                    "浴衣を着て花火大会に行く",
-                    "海辺で朝日を見る",
-                    "かき氷の有名店に行く",
-                    "夏野菜カレーを作る",
-                    "友だちとナイトプールに行く",
-                    "ひまわり畑で写真を撮る",
-                    "ベランダで小さなハーブを育てる",
-                    "涼しい図書館で読書する",
-                    "日焼け止めを毎日塗る",
-                    "夏のワンピースを1着買う",
-                    "冷たい抹茶ラテを作る",
-                    "夕方に川沿いを散歩する",
-                    "夏限定の美術展に行く",
-                    "旅行用ポーチを整理する",
-                ],
-            },
-            {
-                "title": "一人旅でしたいこと",
-                "target_count": 50,
-                "is_public": True,
-                "items": [
-                    "京都で朝のお寺を散歩する",
-                    "ローカル線に乗って知らない町へ行く",
-                    "旅先で手紙を書く",
-                    "市場で朝ごはんを食べる",
-                    "小さな宿に泊まる",
-                    "旅ノートに写真を貼る",
-                    "美術館をゆっくり見る",
-                    "海の見えるカフェで読書する",
-                    "温泉街を歩く",
-                    "ご当地スーパーで買い物する",
-                    "旅先でランニングする",
-                    "カメラだけ持って半日歩く",
+                    ("春色のショールを編む", "hobby"),
+                    ("自分用のカーディガンを完成させる", "hobby"),
+                    ("友達に小さなポーチを贈る", "hobby"),
+                    ("夏用バッグを編む", "hobby"),
+                    ("編み図を3つ整理する", "hobby"),
+                    ("余り糸でコースターを作る", "hobby"),
+                    ("作品写真をきれいに撮る", "hobby"),
+                    ("毛糸収納を整える", "other"),
                 ],
             },
         ],
@@ -156,46 +53,34 @@ DEMO_USERS = [
     {
         "username": "mika",
         "display_name": "Mika",
-        "bio": "カフェ、美容、お金のことを楽しく整え中です。",
-        "password": "demo-pass-123",
+        "bio": "東京のカフェと美容のリストを育てています。",
         "lists": [
             {
                 "title": "東京カフェ巡り",
                 "target_count": 30,
                 "is_public": True,
                 "items": [
-                    "朝カフェで読書する",
-                    "蔵前のカフェでプリンを食べる",
-                    "表参道でラテアートを楽しむ",
-                    "神保町で本屋カフェに行く",
-                    "清澄白河でコーヒー豆を買う",
-                    "吉祥寺でテラス席のある店に行く",
-                    "日本橋で静かな喫茶店を探す",
-                    "代々木上原で焼き菓子を買う",
-                    "中目黒で桜の時期にカフェへ行く",
-                    "浅草で和カフェに入る",
-                    "カフェ巡りマップを作る",
-                    "お気に入りの席を写真に残す",
-                    "月1回カフェ予算を決める",
+                    ("朝カフェで読書する", "hobby"),
+                    ("表参道でラテアートを楽しむ", "hobby"),
+                    ("神保町で本屋カフェに行く", "hobby"),
+                    ("清澄白河でコーヒー豆を買う", "hobby"),
+                    ("月1回カフェ予算を決める", "money"),
+                    ("カフェ巡りマップを作る", "hobby"),
+                    ("新しいカフェを3件開拓する", "hobby"),
+                    ("お気に入り席を写真に残す", "hobby"),
                 ],
             },
             {
-                "title": "美容と健康を整える",
+                "title": "自分磨きリスト",
                 "target_count": 50,
                 "is_public": False,
                 "items": [
-                    "週3回ストレッチする",
-                    "スキンケアを朝晩続ける",
-                    "似合うリップを見つける",
-                    "髪をつやつやに保つ",
-                    "毎日水を1.5リットル飲む",
-                    "寝る前のスマホ時間を減らす",
-                    "月1回ネイルを整える",
-                    "姿勢改善の動画を続ける",
-                    "お気に入りの香りを探す",
-                    "健康診断の予約をする",
-                    "湯船にゆっくり浸かる日を作る",
-                    "メイクポーチを整理する",
+                    ("週3回ストレッチする", "health"),
+                    ("スキンケアを毎晩続ける", "beauty"),
+                    ("似合うリップを見つける", "beauty"),
+                    ("健康診断を予約する", "health"),
+                    ("寝る前のスマホ時間を減らす", "health"),
+                    ("メイクポーチを整理する", "beauty"),
                 ],
             },
         ],
@@ -203,65 +88,101 @@ DEMO_USERS = [
     {
         "username": "rina",
         "display_name": "Rina",
-        "bio": "仕事と暮らしのリストを育てています。",
-        "password": "demo-pass-123",
+        "bio": "仕事と暮らしを整えるリストを作っています。",
         "lists": [
-            {
-                "title": "恋人とやりたいこと",
-                "target_count": 30,
-                "is_public": True,
-                "items": [
-                    "一緒に水族館へ行く",
-                    "記念日に手紙を書く",
-                    "夜景の見えるレストランに行く",
-                    "週末に映画を2本見る",
-                    "お互いの好きな本を交換する",
-                    "温泉旅行を計画する",
-                    "一緒に料理を作る",
-                    "写真をアルバムにまとめる",
-                    "朝の公園を散歩する",
-                    "クリスマスマーケットに行く",
-                    "おそろいのマグカップを買う",
-                    "家でたこ焼きパーティーをする",
-                ],
-            },
             {
                 "title": "仕事で伸ばしたいこと",
                 "target_count": 70,
-                "is_public": False,
+                "is_public": True,
                 "items": [
-                    "ポートフォリオを作り直す",
-                    "資格の勉強を始める",
-                    "朝30分だけ専門書を読む",
-                    "副業の売上を作る",
-                    "週1回ふりかえりを書く",
-                    "プレゼン資料を改善する",
-                    "作業時間を記録する",
-                    "新しいツールを1つ試す",
-                    "英語のメール表現を覚える",
-                    "上司にキャリア相談をする",
-                    "集中できるデスク環境を作る",
-                    "月末に成果をまとめる",
-                    "仕事用プロフィールを更新する",
+                    ("ポートフォリオを作り直す", "work"),
+                    ("資格の勉強を始める", "study"),
+                    ("月10分だけ専門書を読む", "study"),
+                    ("副業の売上を作る", "work"),
+                    ("週1回ふりかえりを書く", "work"),
+                    ("プレゼン資料を改善する", "work"),
+                    ("作業時間を記録する", "work"),
+                    ("新しいツールを1つ試す", "work"),
                 ],
             },
             {
+                "title": "部屋を整える",
+                "target_count": 20,
+                "is_public": True,
+                "items": [
+                    ("本棚を整理する", "other"),
+                    ("観葉植物を迎える", "other"),
+                    ("お気に入りの香りを見つける", "beauty"),
+                    ("机まわりをすっきりさせる", "other"),
+                    ("キッチン収納を見直す", "other"),
+                    ("写真を飾るスペースを作る", "hobby"),
+                ],
+            },
+        ],
+    },
+    {
+        "username": "yuki",
+        "display_name": "Yuki",
+        "bio": "一人旅と読書のためのマイリストです。",
+        "lists": [
+            {
                 "title": "一人旅でしたいこと",
+                "target_count": 50,
+                "is_public": True,
+                "items": [
+                    ("京都で朝のお寺を散歩する", "travel"),
+                    ("小さな宿に泊まる", "travel"),
+                    ("旅ノートに写真を貼る", "hobby"),
+                    ("市場で朝ごはんを食べる", "travel"),
+                    ("海の見えるカフェで読書する", "hobby"),
+                    ("温泉街を歩く", "travel"),
+                    ("ローカル線に乗る", "travel"),
+                    ("旅先で手紙を書く", "other"),
+                ],
+            },
+            {
+                "title": "本と勉強のリスト",
+                "target_count": 30,
+                "is_public": False,
+                "items": [
+                    ("寝る前に30分読書する", "study"),
+                    ("読みたい本リストを作る", "study"),
+                    ("英語で日記を書く", "study"),
+                    ("図書館カードを更新する", "study"),
+                    ("読書メモを残す", "study"),
+                ],
+            },
+        ],
+    },
+    {
+        "username": "sora",
+        "display_name": "Sora",
+        "bio": "健康とお金まわりの習慣を作りたいです。",
+        "lists": [
+            {
+                "title": "健康習慣リスト",
                 "target_count": 30,
                 "is_public": True,
                 "items": [
-                    "沖縄で海を見ながら朝ごはんを食べる",
-                    "旅先の小さな本屋に入る",
-                    "ローカルカフェで日記を書く",
-                    "港町で夕焼けを眺める",
-                    "市場でおみやげを選ぶ",
-                    "古い町並みを写真に撮る",
-                    "一人で温泉宿に泊まる",
-                    "旅ノートに使ったお金をまとめる",
-                    "美術館を時間を気にせず見る",
-                    "知らない駅で途中下車する",
-                    "朝の散歩で神社に行く",
-                    "帰ってから写真を整理する",
+                    ("週3回ストレッチする", "health"),
+                    ("朝に白湯を飲む", "health"),
+                    ("月1回長めに散歩する", "health"),
+                    ("睡眠時間を記録する", "health"),
+                    ("野菜を多めに食べる日を作る", "health"),
+                    ("スマホを見ない夜を作る", "health"),
+                ],
+            },
+            {
+                "title": "お金を整える",
+                "target_count": 20,
+                "is_public": True,
+                "items": [
+                    ("月5万円貯金する", "money"),
+                    ("家計簿を週1回見直す", "money"),
+                    ("サブスクを整理する", "money"),
+                    ("投資の本を1冊読む", "study"),
+                    ("ふるさと納税を調べる", "money"),
+                    ("欲しいものリストを作る", "money"),
                 ],
             },
         ],
@@ -269,94 +190,104 @@ DEMO_USERS = [
 ]
 
 
+FOLLOW_RELATIONS = [
+    ("hana", "mika"),
+    ("hana", "rina"),
+    ("mika", "hana"),
+    ("mika", "sora"),
+    ("rina", "hana"),
+    ("rina", "yuki"),
+    ("yuki", "mika"),
+    ("sora", "hana"),
+    ("sora", "rina"),
+]
+
+
 class Command(BaseCommand):
-    help = "Create demo users, my lists, and concrete public/private list items."
+    help = "Create reusable demo users, profiles, public/private my lists, follows, and saved lists."
 
     def handle(self, *args, **options):
         User = get_user_model()
         today = timezone.localdate()
-        random.seed(20260511)
+        random.seed(20260615)
 
+        users = {}
         created_users = 0
-        created_plans = 0
-        created_goals = 0
-        updated_goals = 0
-        deleted_old_goals = 0
+        touched_lists = 0
+        touched_items = 0
 
-        for user_spec in DEMO_USERS:
-            user, user_created = User.objects.get_or_create(
-                username=user_spec["username"],
-                defaults={"email": f"{user_spec['username']}@example.com"},
+        for spec in DEMO_USERS:
+            user, created = User.objects.get_or_create(
+                username=spec["username"],
+                defaults={"email": f"{spec['username']}@example.com"},
             )
-            if user_created:
-                user.set_password(user_spec["password"])
+            if created:
+                user.set_password("demo-pass-123")
                 user.save(update_fields=["password"])
                 created_users += 1
+            users[spec["username"]] = user
 
             profile, _ = Profile.objects.get_or_create(user=user)
-            profile.display_name = user_spec["display_name"]
-            profile.bio = user_spec["bio"]
+            profile.display_name = spec["display_name"]
+            profile.bio = spec["bio"]
             profile.save(update_fields=["display_name", "bio"])
 
-            for plan_index, list_spec in enumerate(user_spec["lists"]):
-                year = today.year + plan_index
-                plan = YearPlan.objects.filter(user=user, list_title=list_spec["title"]).first()
-                if plan is None:
-                    plan = YearPlan.objects.create(
-                        user=user,
-                        year=year,
-                        list_title=list_spec["title"],
-                        target_count=list_spec["target_count"],
-                        is_public=list_spec["is_public"],
-                    )
-                    created_plans += 1
-                else:
-                    plan.year = year
-                    plan.target_count = list_spec["target_count"]
-                    plan.is_public = list_spec["is_public"]
-                    plan.save(update_fields=["year", "target_count", "is_public"])
-
-                cleanup_result = YearlyGoal.objects.filter(
+            for list_index, list_spec in enumerate(spec["lists"]):
+                plan, _ = YearPlan.objects.update_or_create(
                     user=user,
-                    year_plan=plan,
-                ).exclude(title__in=list_spec["items"]).delete()
-                deleted_old_goals += cleanup_result[0]
+                    list_title=list_spec["title"],
+                    defaults={
+                        "year": today.year + list_index,
+                        "target_count": list_spec["target_count"],
+                        "is_public": list_spec["is_public"],
+                    },
+                )
+                touched_lists += 1
 
-                for item_index, title in enumerate(list_spec["items"], start=1):
-                    is_done = item_index % 5 == 0
-                    item_is_public = item_index % 6 != 0
-                    completed_date = today - timedelta(days=item_index * 3) if is_done else None
-                    category = category_for(title)
-
-                    goal = YearlyGoal.objects.filter(
+                for item_index, (title, category) in enumerate(list_spec["items"], start=1):
+                    is_done = item_index % 4 == 0
+                    item_is_public = list_spec["is_public"] and item_index % 5 != 0
+                    completed_date = today - timedelta(days=item_index * 2) if is_done else None
+                    YearlyGoal.objects.update_or_create(
                         user=user,
                         year_plan=plan,
                         title=title,
-                    ).first()
-                    defaults = {
-                        "description": f"{list_spec['title']}の確認用ダミーデータ",
-                        "category": category,
-                        "is_done": is_done,
-                        "completed_date": completed_date,
-                        "is_public": list_spec["is_public"],
-                        "item_is_public": item_is_public,
-                    }
-                    if goal is None:
-                        YearlyGoal.objects.create(user=user, year_plan=plan, title=title, **defaults)
-                        created_goals += 1
-                    else:
-                        for field, value in defaults.items():
-                            setattr(goal, field, value)
-                        goal.save(update_fields=[*defaults.keys(), "updated_at"])
-                        updated_goals += 1
+                        defaults={
+                            "description": "UI確認用のダミーデータです。",
+                            "category": category if category in CATEGORIES else "other",
+                            "is_done": is_done,
+                            "completed_date": completed_date,
+                            "is_public": list_spec["is_public"],
+                            "item_is_public": item_is_public,
+                        },
+                    )
+                    touched_items += 1
+
+        for follower_username, following_username in FOLLOW_RELATIONS:
+            follower = users[follower_username]
+            following = users[following_username]
+            if follower != following:
+                Follow.objects.get_or_create(follower=follower, following=following)
+
+        public_plans = list(YearPlan.objects.filter(user__in=users.values(), is_public=True))
+        saved_count = 0
+        liked_count = 0
+        for username, user in users.items():
+            own_plan_ids = {plan.pk for plan in YearPlan.objects.filter(user=user)}
+            candidates = [plan for plan in public_plans if plan.pk not in own_plan_ids]
+            for plan in candidates[:3]:
+                _, saved_created = SavedList.objects.get_or_create(user=user, my_list=plan)
+                _, liked_created = LikeList.objects.get_or_create(user=user, my_list=plan)
+                saved_count += int(saved_created)
+                liked_count += int(liked_created)
 
         self.stdout.write(
             self.style.SUCCESS(
-                "Demo data ready. "
-                f"users created: {created_users}, "
-                f"lists created: {created_plans}, "
-                f"goals created: {created_goals}, "
-                f"goals updated: {updated_goals}, "
-                f"old demo goals removed: {deleted_old_goals}"
+                "Demo data ready: "
+                f"users created={created_users}, "
+                f"lists touched={touched_lists}, "
+                f"items touched={touched_items}, "
+                f"saved created={saved_count}, "
+                f"likes created={liked_count}"
             )
         )

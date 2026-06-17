@@ -1,0 +1,177 @@
+<style>
+    .yearly-notebook {
+        border: 1px solid #dfd2c0;
+        border-radius: 8px;
+        background: #fffdf8;
+        box-shadow: 0 8px 18px rgba(77, 61, 42, 0.08);
+        overflow: hidden;
+    }
+    .notebook-header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 18px;
+        border-bottom: 1px solid #eadfce;
+        background: #fff8ec;
+    }
+    .notebook-header h3 {
+        margin: 0;
+        font-size: 18px;
+    }
+    .notebook-header-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        justify-content: flex-end;
+    }
+    .page-control {
+        display: flex;
+        grid-column: 1 / -1;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        justify-content: flex-end;
+        color: #5e5143;
+        font-weight: 700;
+    }
+    .page-control .button {
+        width: auto;
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+    .spread {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        background: linear-gradient(90deg, transparent calc(50% - 1px), #eadfce calc(50% - 1px), #eadfce calc(50% + 1px), transparent calc(50% + 1px));
+    }
+    .page {
+        min-height: 360px;
+        padding: 16px 18px 18px;
+    }
+    .page-label {
+        margin: 0 0 10px;
+        color: #8a7a67;
+        font-size: 12px;
+        font-weight: 700;
+    }
+    .notebook-goal-row {
+        display: grid;
+        grid-template-columns: 20px minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: center;
+        padding: 7px 0;
+        border-bottom: 1px solid #f0e8dc;
+    }
+    .notebook-goal-row.done {
+        opacity: 0.68;
+    }
+    .notebook-goal-row.done .notebook-goal-title {
+        color: #777;
+        text-decoration: line-through;
+    }
+    .notebook-check-form {
+        display: contents;
+    }
+    .goal-check {
+        cursor: pointer;
+    }
+    .notebook-goal-main {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        min-width: 0;
+    }
+    .notebook-goal-title {
+        overflow-wrap: anywhere;
+        color: #3e3326;
+        font-weight: 600;
+        text-decoration: none;
+        text-underline-offset: 4px;
+    }
+    .notebook-goal-title:hover,
+    .notebook-goal-title:focus,
+    .notebook-goal-title:active {
+        color: #6f5634;
+        text-decoration: underline;
+    }
+    .completion-editor {
+        display: none;
+    }
+    .detail-summary-row,
+    .detail-reaction-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+    }
+    .detail-reaction-row form {
+        margin: 0;
+    }
+    .detail-owner-row {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+    }
+    .detail-owner-name {
+        color: #5f5144;
+        font-weight: 700;
+    }
+    .detail-owner-link {
+        color: inherit;
+        text-decoration: none;
+    }
+    .detail-top-nav {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+    .detail-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+        margin-left: auto;
+    }
+    .list-title-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: start;
+        gap: 16px;
+        margin-bottom: 16px;
+    }
+    .list-title-row h2 {
+        margin: 0;
+    }
+    .settings-button {
+        padding: 6px 12px;
+        font-size: 13px;
+        white-space: nowrap;
+    }
+    @media (max-width: 860px) {
+        .spread {
+            grid-template-columns: 1fr;
+            background: none;
+        }
+        .page:first-child {
+            border-bottom: 1px solid #eadfce;
+        }
+        .detail-actions {
+            margin-left: auto;
+            justify-content: flex-end;
+        }
+        .page-control {
+            justify-content: flex-start;
+        }
+        .notebook-goal-row {
+            grid-template-columns: 20px minmax(0, 1fr);
+        }
+        .detail-owner-row {
+            grid-template-columns: auto minmax(0, 1fr) auto;
+        }
+    }
+</style>

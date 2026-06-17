@@ -3,169 +3,7 @@
 {% block title %}{{ setting.list_title|default:"マイリスト" }} - 叶えたいことリスト{% endblock %}
 
 {% block content %}
-<style>
-    .yearly-notebook {
-        border: 1px solid #dfd2c0;
-        border-radius: 8px;
-        background: #fffdf8;
-        box-shadow: 0 8px 18px rgba(77, 61, 42, 0.08);
-        overflow: hidden;
-    }
-    .notebook-header {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: center;
-        gap: 12px;
-        padding: 14px 18px;
-        border-bottom: 1px solid #eadfce;
-        background: #fff8ec;
-    }
-    .notebook-header h3 {
-        margin: 0;
-        font-size: 18px;
-    }
-    .notebook-header-actions {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        justify-content: flex-end;
-    }
-    .page-control {
-        display: flex;
-        grid-column: 1 / -1;
-        flex-wrap: wrap;
-        gap: 8px;
-        align-items: center;
-        justify-content: flex-end;
-        color: #5e5143;
-        font-weight: 700;
-    }
-    .spread {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-        background: linear-gradient(90deg, transparent calc(50% - 1px), #eadfce calc(50% - 1px), #eadfce calc(50% + 1px), transparent calc(50% + 1px));
-    }
-    .page {
-        min-height: 360px;
-        padding: 16px 18px 18px;
-    }
-    .page-label {
-        margin: 0 0 10px;
-        color: #8a7a67;
-        font-size: 12px;
-        font-weight: 700;
-    }
-    .notebook-goal-row {
-        display: grid;
-        grid-template-columns: 20px minmax(0, 1fr) auto;
-        gap: 8px;
-        align-items: center;
-        padding: 7px 0;
-        border-bottom: 1px solid #f0e8dc;
-    }
-    .notebook-goal-row.done {
-        opacity: 0.68;
-    }
-    .notebook-goal-row.done .notebook-goal-title {
-        color: #777;
-        text-decoration: line-through;
-    }
-    .notebook-check-form {
-        display: contents;
-    }
-    .goal-check {
-        width: 18px;
-        height: 18px;
-        accent-color: #6f5634;
-        cursor: pointer;
-    }
-    .notebook-goal-main {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        align-items: center;
-        min-width: 0;
-    }
-    .notebook-goal-title {
-        overflow-wrap: anywhere;
-        font-weight: 600;
-    }
-    .completion-editor {
-        display: none;
-    }
-    .detail-summary {
-        display: grid;
-        gap: 10px;
-        margin-bottom: 16px;
-        border: 1px solid #e4d7c4;
-        border-radius: 18px;
-        background: #fffdf8;
-        padding: 16px;
-        box-shadow: 0 8px 18px rgba(76, 57, 33, 0.06);
-    }
-    .detail-summary p {
-        margin: 0;
-    }
-    .detail-summary-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        align-items: center;
-    }
-    .detail-top-nav {
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-        gap: 12px;
-        margin-bottom: 12px;
-    }
-    .back-link {
-        color: #6a5538;
-        font-weight: 700;
-        text-decoration: none;
-    }
-    .detail-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        justify-content: flex-end;
-        margin-left: auto;
-    }
-    .list-title-row {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: start;
-        gap: 16px;
-        margin-bottom: 16px;
-    }
-    .list-title-row h2 {
-        margin: 0;
-    }
-    .settings-button {
-        padding: 6px 12px;
-        font-size: 13px;
-        white-space: nowrap;
-    }
-    @media (max-width: 860px) {
-        .spread {
-            grid-template-columns: 1fr;
-            background: none;
-        }
-        .page:first-child {
-            border-bottom: 1px solid #eadfce;
-        }
-        .detail-actions {
-            margin-left: auto;
-            justify-content: flex-end;
-        }
-        .page-control {
-            justify-content: flex-start;
-        }
-        .notebook-goal-row {
-            grid-template-columns: 20px minmax(0, 1fr);
-        }
-    }
-</style>
+{% include "goals/partials/list_detail_notebook_styles.html" %}
 
 <div class="detail-top-nav">
     <a class="back-link" href="{% url 'goals:yearly_goal_list' %}">← マイリスト</a>
@@ -182,13 +20,14 @@
     </div>
 </div>
 
-<section class="detail-summary">
+<section class="progress-summary detail-summary">
     <p class="meta">達成 {{ done_count }}件 / 登録 {{ total_count }}件 / 目標 {{ setting.target_count }}件 / あと {{ remaining_count }}件</p>
     <div class="progress-track">
         <div class="progress-bar" style="width: {{ setting.progress_percent }}%;"></div>
     </div>
-    <div class="detail-summary-row">
+    <div class="progress-summary-row detail-summary-row">
         <span class="status-pill">達成率 {{ setting.progress_percent }}%</span>
+        <span class="status-pill">目標 {{ setting.target_count }}件</span>
         <span class="status-pill {% if not setting.is_public %}private{% endif %}">
             このリストは{% if setting.is_public %}公開{% else %}非公開{% endif %}
         </span>
@@ -201,42 +40,23 @@
         <div class="notebook-header-actions">
             <a class="button small-button pill-button" href="{% url 'goals:yearly_goal_add' %}?list={{ setting.pk }}">追加</a>
         </div>
-        <div class="page-control">
-            {% if previous_page %}
-                <a class="button small-button" href="?page={{ previous_page }}">前のページ</a>
-            {% endif %}
-            <span>{{ current_page }} / {{ total_pages }} ページ</span>
-            {% if next_page %}
-                <a class="button small-button" href="?page={{ next_page }}">次のページ</a>
-            {% endif %}
-        </div>
     </header>
 
-    <div class="spread book-spread">
-        <div class="page book-page">
-            <p class="page-label">左ページ</p>
-            <div class="goal-list" data-page-side="left">
-            {% for goal in left_goals %}
-                {% include "goals/partials/yearly_notebook_goal.html" with goal=goal %}
-            {% empty %}
-                <p class="meta">このページにはまだ項目がありません。</p>
-            {% endfor %}
-            </div>
-        </div>
-
-        <div class="page book-page">
-            <p class="page-label">右ページ</p>
-            <div class="goal-list" data-page-side="right">
-            {% for goal in right_goals %}
-                {% include "goals/partials/yearly_notebook_goal.html" with goal=goal %}
-            {% empty %}
-                <p class="meta">このページにはまだ項目がありません。</p>
-            {% endfor %}
-            </div>
-        </div>
-    </div>
+    {% include "goals/partials/list_detail_notebook_pages.html" with row_template="goals/partials/yearly_notebook_goal.html" %}
 
 </section>
+
+{% if total_pages > 1 %}
+    <nav class="app-pagination">
+        {% if previous_page %}
+            <a class="button small-button pill-button" href="?page={{ previous_page }}">前へ</a>
+        {% endif %}
+        <span>{{ current_page }} / {{ total_pages }} ページ</span>
+        {% if next_page %}
+            <a class="button small-button pill-button" href="?page={{ next_page }}">次へ</a>
+        {% endif %}
+    </nav>
+{% endif %}
 
 <script>
     function bindGoalRow(row) {

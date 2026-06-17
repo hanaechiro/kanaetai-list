@@ -39,9 +39,26 @@ class SignUpForm(UserCreationForm):
 
 
 class ProfileForm(forms.ModelForm):
+    avatar_crop_data = forms.CharField(required=False, widget=forms.HiddenInput)
+
     class Meta:
         model = Profile
         fields = ["display_name", "bio", "icon"]
+        widgets = {
+            "display_name": forms.TextInput(attrs={
+                "class": "app-input",
+                "placeholder": "表示名",
+            }),
+            "bio": forms.Textarea(attrs={
+                "class": "app-textarea",
+                "rows": 4,
+                "placeholder": "自己紹介を書いてください",
+            }),
+            "icon": forms.ClearableFileInput(attrs={
+                "class": "app-file-input",
+                "accept": "image/*",
+            }),
+        }
 
 
 class ListCommentForm(forms.ModelForm):

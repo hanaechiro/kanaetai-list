@@ -3,22 +3,92 @@
 {% block title %}思いつきメモ - 叶えたいことリスト{% endblock %}
 
 {% block content %}
-<div class="page-title">
+<style>
+    .idea-page-title {
+        align-items: center;
+    }
+    .idea-page-title .button {
+        min-width: 92px;
+        justify-content: center;
+        white-space: nowrap;
+    }
+    .memo-list {
+        display: grid;
+        gap: 12px;
+    }
+    .memo-card {
+        border: 1px solid #eadfce;
+        border-radius: 16px;
+        background: #fffdf8;
+        padding: 14px 15px;
+        box-shadow: 0 7px 16px rgba(76, 57, 33, 0.05);
+    }
+    .memo-card-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+    }
+    .memo-card-actions {
+        display: inline-flex;
+        flex: 0 0 auto;
+        gap: 8px;
+        white-space: nowrap;
+    }
+    .memo-action-link {
+        border: 1px solid #eadfce;
+        border-radius: 999px;
+        background: #fff8ec;
+        color: #6a5538;
+        padding: 4px 9px;
+        font-size: 12px;
+        font-weight: 700;
+        text-decoration: none;
+    }
+    .memo-action-link:hover,
+    .memo-action-link:focus,
+    .memo-action-link:active {
+        background: #f6ecdc;
+        text-decoration: none;
+    }
+    .memo-action-link.danger {
+        border-color: #ead5ce;
+        background: #fff7f4;
+        color: #8b4a3d;
+    }
+    .memo-card p {
+        margin-bottom: 0;
+    }
+    @media (max-width: 768px) {
+        .memo-card {
+            padding: 13px;
+        }
+        .memo-card-header {
+            align-items: flex-start;
+        }
+    }
+</style>
+
+<div class="page-title idea-page-title">
     <h2>思いつきメモ</h2>
-    <a class="button" href="{% url 'goals:idea_memo_add' %}">追加する</a>
+    <a class="button pill-button" href="{% url 'goals:idea_memo_add' %}">＋追加</a>
 </div>
 
-{% for memo in memos %}
-    <article class="item">
-        <div class="item-title">{{ memo.title }}</div>
-        {% if memo.note %}<p>{{ memo.note|linebreaksbr }}</p>{% endif %}
-        <p class="meta">{{ memo.created_at|date:"Y年n月j日 H:i" }}</p>
-        <div class="actions">
-            <a class="button" href="{% url 'goals:idea_memo_edit' memo.pk %}">編集</a>
-            <a class="button danger" href="{% url 'goals:idea_memo_delete' memo.pk %}">削除</a>
-        </div>
-    </article>
-{% empty %}
-    <p class="notice">まだ思いつきメモがありません。</p>
-{% endfor %}
+<section class="memo-list">
+    {% for memo in memos %}
+        <article class="memo-card">
+            <div class="memo-card-header">
+                <div class="item-title">{{ memo.title }}</div>
+                <div class="memo-card-actions">
+                    <a class="memo-action-link" href="{% url 'goals:idea_memo_edit' memo.pk %}">編集</a>
+                    <a class="memo-action-link danger" href="{% url 'goals:idea_memo_delete' memo.pk %}">削除</a>
+                </div>
+            </div>
+            {% if memo.note %}<p>{{ memo.note|linebreaksbr }}</p>{% endif %}
+            <p class="meta">{{ memo.created_at|date:"Y年n月j日 H:i" }}</p>
+        </article>
+    {% empty %}
+        <p class="notice">まだ思いつきメモがありません。</p>
+    {% endfor %}
+</section>
 {% endblock %}

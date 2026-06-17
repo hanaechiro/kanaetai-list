@@ -22,7 +22,7 @@
     }
     .search-row {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 170px;
+        grid-template-columns: minmax(0, 1fr);
         gap: 8px;
         align-items: center;
     }
@@ -53,108 +53,6 @@
     .clear-search-link:active {
         text-decoration: underline;
     }
-    .discover-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-        gap: 16px;
-    }
-    .discover-card {
-        display: grid;
-        gap: 10px;
-        border: 1px solid #dfcfb7;
-        border-radius: 18px;
-        background:
-            radial-gradient(circle at 18% 10%, rgba(255, 255, 255, 0.7), transparent 28%),
-            #fffaf0;
-        padding: 16px;
-        box-shadow: 0 12px 26px rgba(76, 57, 33, 0.09);
-    }
-    .discover-card-head {
-        display: grid;
-        grid-template-columns: auto minmax(0, 1fr);
-        gap: 10px;
-        align-items: center;
-    }
-    .discover-card h3 {
-        margin: 2px 0 0;
-        color: #3e3326;
-        font-size: 18px;
-        line-height: 1.45;
-    }
-    .discover-title-link {
-        color: inherit;
-        text-decoration: none;
-        text-underline-offset: 4px;
-        text-decoration-thickness: 1px;
-    }
-    .discover-title-link:hover,
-    .discover-title-link:focus,
-    .discover-title-link:active {
-        color: #6f5634;
-        text-decoration: underline;
-    }
-    .profile-avatar-link {
-        color: inherit;
-        text-decoration: none;
-    }
-    .discover-user {
-        margin: 0;
-        color: #7a6750;
-        font-size: 13px;
-        font-weight: 700;
-    }
-    .discover-tags,
-    .discover-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        align-items: center;
-    }
-    .discover-progress {
-        display: grid;
-        gap: 6px;
-        color: #6a5841;
-        font-size: 13px;
-        font-weight: 700;
-    }
-    .discover-stats {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px 12px;
-        margin: 0;
-        color: #8a7a67;
-        font-size: 12px;
-    }
-    .discover-stats div {
-        display: inline-flex;
-        gap: 3px;
-        align-items: baseline;
-        border: 0;
-        background: transparent;
-        padding: 0;
-    }
-    .discover-stats dt {
-        color: #8a7a67;
-        font-size: 12px;
-    }
-    .discover-stats dd {
-        margin: 0;
-        color: #6a5841;
-        font-weight: 600;
-    }
-    .pagination {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        justify-content: center;
-        margin-top: 18px;
-    }
-    .pagination .button {
-        width: auto;
-        flex: 0 0 auto;
-        padding-left: 12px;
-        padding-right: 12px;
-    }
     @media (max-width: 760px) {
         .search-row {
             grid-template-columns: 1fr;
@@ -183,15 +81,6 @@
             <label for="q">キーワード</label>
             <input id="q" type="text" name="q" value="{{ query }}" placeholder="リスト名・項目名・ユーザー名">
         </div>
-        <div>
-            <label for="category">カテゴリ</label>
-            <select id="category" name="category">
-                <option value="">すべて</option>
-                {% for value, label in categories %}
-                    <option value="{{ value }}" {% if selected_category == value %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
-        </div>
         <div class="search-actions">
             <a class="clear-search-link" href="{% url 'goals:public_goal_list' %}">条件をクリア</a>
             <button class="button pill-button" type="submit">検索</button>
@@ -208,7 +97,7 @@
 </section>
 
 {% if page_obj.paginator.num_pages > 1 %}
-    <nav class="pagination">
+    <nav class="app-pagination pagination">
         {% if page_obj.has_previous %}
             <a class="button small-button pill-button" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.previous_page_number }}">前へ</a>
         {% endif %}

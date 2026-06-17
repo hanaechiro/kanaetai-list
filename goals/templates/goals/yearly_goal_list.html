@@ -4,10 +4,6 @@
 
 {% block content %}
 <style>
-    .my-list-grid {
-        display: grid;
-        gap: 14px;
-    }
     .my-list-title-row {
         display: flex;
         align-items: center;
@@ -19,45 +15,32 @@
         margin: 0;
         font-size: 26px;
     }
-    .my-list-card {
+    .my-list-search {
         display: grid;
-        gap: 10px;
-        border: 1px solid #eadfce;
-        border-radius: 8px;
-        background: #fffdf8;
-        padding: 16px;
+        gap: 8px;
+        margin-bottom: 18px;
+        padding: 12px;
     }
-    .my-list-card-header {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 12px;
-    }
-    .my-list-card h3 {
-        margin: 0;
-        font-size: 18px;
-    }
-    .my-list-card h3 a {
-        color: inherit;
-        text-decoration: none;
-    }
-    .my-list-card h3 a:hover,
-    .my-list-card h3 a:focus,
-    .my-list-card h3 a:active {
-        text-decoration: underline;
-    }
-    .my-list-stats {
-        display: flex;
-        flex-wrap: wrap;
+    .my-list-search-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
         gap: 8px;
         align-items: center;
     }
-    .pagination {
+    .my-list-search-row label {
+        display: block;
+        margin-bottom: 4px;
+        color: #7a6750;
+        font-size: 12px;
+        font-weight: 700;
+    }
+    .my-list-search-actions {
         display: flex;
         gap: 10px;
         align-items: center;
-        justify-content: center;
-        margin-top: 18px;
+        justify-content: flex-end;
+        align-self: end;
+        text-align: right;
     }
     @media (max-width: 768px) {
         .my-list-title-row {
@@ -79,24 +62,42 @@
     <a class="button pill-button" href="{% url 'goals:my_list_add' %}">＋新規作成</a>
 </div>
 
-<section class="my-list-grid">
+<section class="panel my-list-search">
+    <form method="get" class="my-list-search-row">
+        <div>
+            <label for="q">キーワード</label>
+            <input id="q" type="text" name="q" value="{{ query }}" placeholder="リスト名・項目名">
+        </div>
+        <div class="my-list-search-actions">
+            <a class="clear-search-link" href="{% url 'goals:yearly_goal_list' %}">条件をクリア</a>
+            <button class="button pill-button" type="submit">検索</button>
+        </div>
+    </form>
+</section>
+
+<section class="discover-grid">
     {% for plan in plans %}
-        <article class="my-list-card">
-            <div class="my-list-card-header">
-                <div>
-                    <h3><a href="{% url 'goals:my_list_detail' plan.pk %}">{{ plan.list_title|default:"マイリスト" }}</a></h3>
+        <article class="list-card discover-card my-list-card">
+            <div class="list-card-top">
+                <div class="discover-card-head">
+                    <div>
+                        <p class="discover-user">マイリスト</p>
+                        <h3>
+                            <a class="discover-title-link" href="{% url 'goals:my_list_detail' plan.pk %}">{{ plan.list_title|default:"マイリスト" }}</a>
+                        </h3>
+                    </div>
                 </div>
-                <span class="status-pill {% if not plan.is_public %}private{% endif %}">
+                <span class="visibility-badge {% if not plan.is_public %}private{% endif %}">
                     {% if plan.is_public %}公開{% else %}非公開{% endif %}
                 </span>
             </div>
 
-            <div class="my-list-stats">
-                <span class="status-pill">達成 {{ plan.goals_done_count }}件</span>
-                <span class="status-pill">登録 {{ plan.goals_count }}件</span>
-            </div>
-            <div>
-                <p class="meta">達成率 {{ plan.progress_percent }}%</p>
+            <div class="discover-progress">
+                <p class="meta-text discover-progress-meta">
+                    <span>達成率 {{ plan.progress_percent }}%</span>
+                    <span>・</span>
+                    <span>目標 {{ plan.target_count }}件</span>
+                </p>
                 <div class="progress-track">
                     <div class="progress-bar" style="width: {{ plan.progress_percent }}%;"></div>
                 </div>
@@ -108,13 +109,13 @@
 </section>
 
 {% if page_obj.paginator.num_pages > 1 %}
-    <nav class="pagination">
+    <nav class="app-pagination pagination">
         {% if page_obj.has_previous %}
-            <a class="button small-button" href="?page={{ page_obj.previous_page_number }}">前へ</a>
+            <a class="button small-button pill-button" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.previous_page_number }}">前へ</a>
         {% endif %}
         <span>{{ page_obj.number }} / {{ page_obj.paginator.num_pages }} ページ</span>
         {% if page_obj.has_next %}
-            <a class="button small-button" href="?page={{ page_obj.next_page_number }}">次へ</a>
+            <a class="button small-button pill-button" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.next_page_number }}">次へ</a>
         {% endif %}
     </nav>
 {% endif %}

@@ -247,6 +247,29 @@ class SavedList(models.Model):
         return f"{self.user} saved {self.my_list}"
 
 
+class SavedItem(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="saved_items",
+    )
+    item = models.ForeignKey(
+        YearlyGoal,
+        on_delete=models.CASCADE,
+        related_name="saved_by",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["user", "item"], name="unique_saved_item_per_user"),
+        ]
+
+    def __str__(self):
+        return f"{self.user} saved {self.item}"
+
+
 class LikeList(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

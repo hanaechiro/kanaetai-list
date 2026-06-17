@@ -1,0 +1,91 @@
+<div class="item-detail-header">
+    <a class="app-back-link" href="{{ back_url }}">← {{ back_label }}</a>
+
+    <div class="item-detail-title-row">
+        <div class="item-detail-title-main">
+            <span class="app-checkbox is-readonly {% if goal.is_done %}is-checked{% endif %}" aria-hidden="true"></span>
+            <h2>{{ goal.title }}</h2>
+        </div>
+        {% if can_edit %}
+            <div class="item-detail-actions">
+                <a class="button pill-button" href="{% url 'goals:yearly_goal_edit' goal.pk %}">編集</a>
+                <a class="button pill-button danger" href="{% url 'goals:yearly_goal_delete' goal.pk %}">削除</a>
+            </div>
+        {% elif can_save_item or not user.is_authenticated %}
+            <div class="item-detail-actions">
+                <form method="post" action="{% url 'goals:toggle_saved_item' goal.pk %}">
+                    {% csrf_token %}
+                    <button class="button pill-button" type="submit">
+                        {% if is_saved_item %}保存済み{% else %}保存{% endif %}
+                    </button>
+                </form>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<section class="item-detail-card">
+    <div class="item-detail-section">
+        <span class="item-detail-label">タイトル</span>
+        <p class="item-detail-body">{{ goal.title }}</p>
+    </div>
+
+    <div class="item-detail-section">
+        <span class="item-detail-label">メモ</span>
+        <p class="item-detail-body">
+            {% if goal.description %}
+                {{ goal.description|linebreaksbr }}
+            {% else %}
+                <span class="meta">メモはまだありません。</span>
+            {% endif %}
+        </p>
+    </div>
+
+    <div class="item-detail-section">
+        <span class="item-detail-label">カテゴリ</span>
+        <p class="item-detail-body item-detail-meta-row">
+            <span class="status-pill">{{ goal.get_category_display }}</span>
+        </p>
+    </div>
+
+    <div class="item-detail-section">
+        <span class="item-detail-label">公開状態</span>
+        <p class="item-detail-body item-detail-meta-row">
+            <span class="status-pill {% if not year_plan.is_public %}private{% endif %}">
+                このリストは{% if year_plan.is_public %}公開{% else %}非公開{% endif %}
+            </span>
+            <span class="status-pill {% if not goal.item_is_public %}private{% endif %}">
+                項目{% if goal.item_is_public %}公開{% else %}非公開{% endif %}
+            </span>
+        </p>
+    </div>
+
+    <div class="item-detail-section">
+        <span class="item-detail-label">完了状態</span>
+        <p class="item-detail-body item-detail-meta-row">
+            <span class="status-pill {% if not goal.is_done %}private{% endif %}">
+                {% if goal.is_done %}完了済み{% else %}未完了{% endif %}
+            </span>
+            {% if goal.is_done and goal.completed_date %}
+                <span class="completed-date">完了日：{{ goal.completed_date|date:"Y/m/d" }}</span>
+            {% endif %}
+        </p>
+    </div>
+
+    <div class="item-detail-section">
+        <span class="item-detail-label">所属リスト / 作成者</span>
+        <div class="item-detail-body item-detail-owner">
+            <a class="avatar profile-avatar-link" href="{% if can_edit %}{% url 'goals:my_profile' %}{% else %}{% url 'goals:profile_detail' year_plan.user.username %}{% endif %}" aria-label="作成者プロフィール">
+                {% if year_plan.user.profile.icon %}
+                    <img src="{{ year_plan.user.profile.icon.url }}" alt="">
+                {% else %}
+                    {{ year_plan.user.profile.display_name|default:year_plan.user.username|slice:":1" }}
+                {% endif %}
+            </a>
+            <span class="item-detail-owner-text">
+                <span>{{ year_plan.list_title|default:"マイリスト" }}</span>
+                <span class="meta">{{ year_plan.user.profile.display_name|default:year_plan.user.username }}さん</span>
+            </span>
+        </div>
+    </div>
+</section>

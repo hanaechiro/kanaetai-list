@@ -1,0 +1,103 @@
+{% extends "goals/base.html" %}
+
+{% block title %}保存した項目 - 叶えたいことリスト{% endblock %}
+
+{% block content %}
+<style>
+    .saved-item-grid {
+        display: grid;
+        gap: 14px;
+    }
+    .saved-item-card {
+        cursor: pointer;
+    }
+    .saved-item-card h3 {
+        margin: 0;
+        color: #3d3021;
+        font-size: 18px;
+        line-height: 1.45;
+    }
+    .saved-item-link {
+        color: inherit;
+        text-decoration: none;
+        text-underline-offset: 4px;
+    }
+    .saved-item-link:hover,
+    .saved-item-link:focus,
+    .saved-item-link:active {
+        color: #6f5634;
+        text-decoration: underline;
+    }
+    .saved-item-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        align-items: center;
+    }
+    .saved-item-actions {
+        display: flex;
+        justify-content: flex-end;
+    }
+    .saved-item-actions form {
+        margin: 0;
+    }
+</style>
+
+<div class="page-title">
+    <h2>保存した項目</h2>
+</div>
+
+<section class="saved-item-grid">
+    {% for saved in saved_items %}
+        {% with item=saved.item plan=saved.item.year_plan %}
+            <article class="list-card saved-item-card" data-href="{% url 'goals:public_goal_detail' item.pk %}">
+                <div class="list-card-top">
+                    <div>
+                        <p class="discover-user">{{ plan.user.profile.display_name|default:plan.user.username }}さん / {{ plan.list_title|default:"マイリスト" }}</p>
+                        <h3>
+                            <a class="saved-item-link" href="{% url 'goals:public_goal_detail' item.pk %}">{{ item.title }}</a>
+                        </h3>
+                    </div>
+                </div>
+
+                <div class="saved-item-meta">
+                    <span class="status-pill">{{ item.get_category_display }}</span>
+                    <span class="status-pill {% if not item.is_done %}private{% endif %}">
+                        {% if item.is_done %}完了済み{% else %}未完了{% endif %}
+                    </span>
+                </div>
+
+                <div class="saved-item-actions">
+                    <form method="post" action="{% url 'goals:toggle_saved_item' item.pk %}">
+                        {% csrf_token %}
+                        <button class="button small-button pill-button" type="submit">保存解除</button>
+                    </form>
+                </div>
+            </article>
+        {% endwith %}
+    {% empty %}
+        <p class="notice">保存した項目はまだありません。</p>
+    {% endfor %}
+</section>
+
+{% if page_obj and page_obj.paginator.num_pages > 1 %}
+    <nav class="app-pagination pagination">
+        {% if page_obj.has_previous %}
+            <a class="button small-button pill-button" href="?page={{ page_obj.previous_page_number }}">前へ</a>
+        {% endif %}
+        <span>{{ page_obj.number }} / {{ page_obj.paginator.num_pages }} ページ</span>
+        {% if page_obj.has_next %}
+            <a class="button small-button pill-button" href="?page={{ page_obj.next_page_number }}">次へ</a>
+        {% endif %}
+    </nav>
+{% endif %}
+
+<script>
+    document.querySelectorAll("[data-href]").forEach((card) => {
+        card.addEventListener("click", (event) => {
+            if (event.target.closest("a, button, form")) return;
+            window.location.href = card.dataset.href;
+        });
+    });
+</script>
+{% endblock %}
