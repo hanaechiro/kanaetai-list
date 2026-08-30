@@ -55,6 +55,22 @@
         font-size: 12px;
         font-weight: 700;
     }
+    .list-panel {
+        overflow: hidden;
+    }
+    .list-panel-header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        padding: 15px 18px;
+        border-bottom: 1px solid var(--app-border, #e5e5e5);
+    }
+    .list-panel-header h3 {
+        margin: 0;
+        color: var(--app-text, #37352f);
+        font-size: 17px;
+    }
     .notebook-goal-row {
         display: grid;
         grid-template-columns: 20px minmax(0, 1fr) auto;
@@ -69,6 +85,58 @@
     .notebook-goal-row.done .notebook-goal-title {
         color: #777;
         text-decoration: line-through;
+    }
+    .goal-list-shell {
+        display: grid;
+        padding-inline: 14px;
+        background: #fff;
+    }
+    .goal-list-shell .notebook-goal-row {
+        grid-template-columns: 20px minmax(0, 1fr) max-content;
+        align-items: center;
+        column-gap: 8px;
+        padding: 9px 2px;
+        border-bottom: 1px solid var(--app-border, #e5e5e5);
+        background: #fff;
+    }
+    .goal-list-shell .notebook-goal-row:last-child {
+        border-bottom: 0;
+    }
+    .goal-list-shell .goal-toggle-cell {
+        display: contents;
+    }
+    .goal-list-shell .goal-check,
+    .goal-list-shell > .notebook-goal-row > .app-checkbox {
+        grid-column: 1;
+        grid-row: 1;
+        align-self: center;
+    }
+    .goal-list-shell .notebook-goal-main {
+        grid-column: 2;
+        grid-row: 1;
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+    }
+    .goal-list-shell .notebook-goal-primary {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        gap: 6px;
+        align-items: center;
+        min-width: 0;
+    }
+    .goal-list-shell .public-goal-actions {
+        grid-column: 3;
+        grid-row: 1;
+        align-self: center;
+        justify-self: end;
+        display: inline-flex;
+        width: auto;
+        min-width: 34px;
+        flex-wrap: nowrap;
+    }
+    .goal-list-shell .public-goal-save-form {
+        margin: 0;
     }
     .notebook-check-form {
         display: contents;
@@ -98,6 +166,161 @@
     }
     .completion-editor {
         display: none;
+        grid-column: 1 / -1;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        margin-top: 4px;
+    }
+    .completion-editor.is-open {
+        display: flex;
+    }
+    .completion-editor label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 1 auto;
+        min-width: 0;
+        color: var(--app-muted, #787774);
+        font-size: 12px;
+        font-weight: 650;
+        white-space: nowrap;
+    }
+    .completion-editor input[type="date"] {
+        flex: 0 0 158px;
+        width: 158px;
+        min-width: 150px;
+        max-width: 190px;
+        min-height: 34px;
+        height: 34px;
+        box-sizing: border-box;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 10px;
+        background: #fff;
+        padding: 0 8px;
+        font-size: 14px;
+    }
+    .completion-editor .button {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+    .list-item-swipe-shell {
+        position: relative;
+        overflow: hidden;
+        background: #fff;
+        touch-action: pan-y;
+    }
+    .list-item-swipe-action {
+        position: absolute;
+        inset: 0 0 0 auto;
+        display: flex;
+        align-items: stretch;
+        justify-content: center;
+        width: 56px;
+        z-index: 0;
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition: opacity 0.12s ease, visibility 0.12s ease;
+    }
+    .list-item-swipe-action form {
+        display: flex;
+        width: 100%;
+        margin: 0;
+    }
+    .list-item-swipe-action button {
+        width: 100%;
+        border: 0;
+        background: transparent;
+        color: #fff;
+        font-size: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+    .list-item-swipe-action button::before {
+        content: "";
+        display: block;
+        width: 18px;
+        height: 20px;
+        box-sizing: border-box;
+        border: 2px solid currentColor;
+        border-top: 0;
+        border-radius: 0 0 3px 3px;
+        box-shadow: 0 -6px 0 -4px currentColor;
+    }
+    .list-item-swipe-action button::after {
+        content: "";
+        position: absolute;
+        width: 22px;
+        height: 2px;
+        background: currentColor;
+        transform: translateY(-11px);
+        border-radius: 999px;
+    }
+    .list-item-swipe-action svg {
+        width: 20px;
+        height: 20px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+    .list-item-swipe-shell .notebook-goal-row {
+        position: relative;
+        z-index: 1;
+        background: #fff;
+        transition: transform 0.18s ease;
+        will-change: transform;
+    }
+    .list-item-swipe-shell.is-swiped .list-item-swipe-action {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+        background: #c9352b;
+    }
+    .list-item-swipe-shell.is-swiped .notebook-goal-row {
+        transform: translateX(-56px);
+    }
+    .completion-save-button {
+        min-width: 58px;
+        min-height: 34px;
+        height: 34px;
+        justify-content: center;
+        padding-inline: 12px;
+        font-size: 13px;
+    }
+    .completion-cancel-button {
+        min-width: auto;
+        min-height: auto;
+        height: auto;
+        border: 0;
+        background: transparent;
+        padding: 4px 2px;
+        color: var(--app-muted, #787774);
+        box-shadow: none;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    @media (max-width: 430px) {
+        .completion-editor {
+            gap: 7px;
+        }
+        .completion-editor label {
+            flex: 1 1 100%;
+        }
+        .completion-editor input[type="date"] {
+            flex: 1 1 170px;
+            width: 100%;
+            min-width: 170px;
+            max-width: 100%;
+            font-size: 16px;
+        }
     }
     .detail-summary-row,
     .detail-reaction-row {
@@ -132,15 +355,16 @@
     }
     .detail-actions {
         display: flex;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         gap: 8px;
+        align-items: center;
         justify-content: flex-end;
         margin-left: auto;
     }
     .list-title-row {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
-        align-items: start;
+        align-items: center;
         gap: 16px;
         margin-bottom: 16px;
     }
@@ -164,11 +388,40 @@
             margin-left: auto;
             justify-content: flex-end;
         }
+        .list-title-row {
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 10px;
+        }
+        .list-title-row .button {
+            padding-inline: 12px;
+        }
         .page-control {
             justify-content: flex-start;
         }
         .notebook-goal-row {
             grid-template-columns: 20px minmax(0, 1fr);
+        }
+        .goal-list-shell {
+            padding-inline: 14px;
+        }
+        .goal-list-shell .notebook-goal-row {
+            grid-template-columns: 20px minmax(0, 1fr) max-content !important;
+        }
+        .goal-list-shell .public-goal-actions {
+            grid-column: 3 !important;
+            grid-row: 1 !important;
+        }
+        .completion-editor {
+            gap: 6px;
+        }
+        .completion-editor label {
+            gap: 6px;
+        }
+        .completion-editor input[type="date"] {
+            flex-basis: 170px;
+            min-width: 170px;
+            max-width: 100%;
         }
         .detail-owner-row {
             grid-template-columns: auto minmax(0, 1fr) auto;

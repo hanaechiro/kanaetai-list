@@ -1,16 +1,16 @@
-import base64
-import binascii
-import uuid
 from datetime import timedelta
 from math import ceil
 
 from django.contrib import messages
-from django.contrib.auth import get_user_model, login
+from django.contrib.auth import get_user_model, login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.files.base import ContentFile
-from django.http import JsonResponse
-from django.db.models import Count, Max, Q, Sum
+from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth.forms import PasswordChangeForm
+from django.core.exceptions import PermissionDenied
+from django.db import IntegrityError
+from django.http import HttpResponse, JsonResponse
+from django.db.models import Count, F, Max, Q, Sum
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -23,10 +23,15 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
 from .forms import (
+    AccountEmailChangeForm,
     IdeaMemoForm,
+    GoalImageForm,
+    GoalLinkForm,
     ListCommentForm,
     MonthlyGoalForm,
     ProfileForm,
+    ProfilePrivacyForm,
+    ProfilePrivacyToggleForm,
     SignUpForm,
     TodayTaskForm,
     WeeklyGoalForm,
@@ -37,6 +42,10 @@ from .forms import (
     YearPlanForm,
 )
 from .models import (
+    CollaborationInvite,
+    FollowRequest,
+    GoalImage,
+    GoalLink,
     GoalSetting,
     Follow,
     IdeaMemo,
@@ -48,11 +57,17 @@ from .models import (
     SavedItem,
     TodayTask,
     TogetherRequest,
+    UserActivity,
     WantToTry,
     WeeklyGoal,
     YearlyGoal,
     YearPlan,
 )
+from .template_data import LIST_TEMPLATES as CURATED_LIST_TEMPLATES
+from .template_data import TEMPLATE_CATEGORIES
+
+
+USERNAME_DUPLICATE_ERROR = "このユーザーネームはすでに使用されています。"
 
 
 LIST_TEMPLATES = [
@@ -825,11 +840,15 @@ LIST_TEMPLATES = [
     {
         "slug": spec["slug"],
         "title": spec["title"],
+        "category": spec["category"],
+        "summary": "、".join(title for title, _category in spec["seeds"][:3]) + "などを集めたテンプレートです。",
         "target_count": spec["target_count"],
         "items": build_theme_items(spec["seeds"], spec["places"], spec["actions"], spec["target_count"], spec["category"]),
     }
     for spec in QUALITY_TEMPLATE_SPECS
 ]
+
+LIST_TEMPLATES = CURATED_LIST_TEMPLATES
 
 
 def current_week_start():
@@ -872,13 +891,145 @@ def touch_year_plan(plan):
         plan.save(update_fields=["updated_at"])
 
 
+def can_manage_year_plan(user, plan):
+    return user.is_authenticated and plan.user_id == user.id
+
+
+def can_edit_year_plan_items(user, plan):
+    return user.is_authenticated and (plan.user_id == user.id or plan.collaborators.filter(pk=user.pk).exists())
+
+
+def can_view_account_details(viewer, owner):
+    if viewer.is_authenticated and viewer.pk == owner.pk:
+        return True
+    profile = getattr(owner, "profile", None)
+    if not profile or not profile.is_private:
+        return True
+    return viewer.is_authenticated and Follow.objects.filter(follower=viewer, following=owner).exists()
+
+
+def can_view_profile(viewer, owner):
+    return can_view_account_details(viewer, owner)
+
+
+def can_view_year_plan(viewer, plan):
+    if plan.user_id == getattr(viewer, "id", None):
+        return True
+    if can_edit_year_plan_items(viewer, plan):
+        return True
+    return plan.is_public and can_view_profile(viewer, plan.user)
+
+
+def can_view_list(viewer, plan):
+    return can_view_year_plan(viewer, plan)
+
+
+def can_view_yearly_goal(viewer, goal):
+    if goal.user_id == getattr(viewer, "id", None):
+        return True
+    if goal.year_plan_id:
+        return goal.item_is_public and can_view_list(viewer, goal.year_plan)
+    return False
+
+
+def visible_public_plan_filter(viewer, prefix=""):
+    user_field = f"{prefix}user"
+    profile_private_field = f"{prefix}user__profile__is_private"
+    profile_missing_field = f"{prefix}user__profile__isnull"
+    user_id_field = f"{prefix}user_id"
+    if viewer.is_authenticated:
+        visible_user_ids = Follow.objects.filter(follower=viewer).values_list("following_id", flat=True)
+        return (
+            Q(**{profile_private_field: False})
+            | Q(**{user_field: viewer})
+            | Q(**{f"{user_id_field}__in": visible_user_ids})
+        )
+    return Q(**{profile_private_field: False}) | Q(**{profile_missing_field: True})
+
+
+def visible_public_goal_filter(viewer):
+    base_filter = Q(item_is_public=True, year_plan__is_public=True)
+    return base_filter & visible_public_plan_filter(viewer, prefix="year_plan__")
+
+
+def get_follow_request_status(requester, target):
+    if not requester.is_authenticated or requester == target:
+        return ""
+    request_obj = FollowRequest.objects.filter(requester=requester, target=target).order_by("-updated_at").first()
+    return request_obj.status if request_obj else ""
+
+
+def build_user_row(user, request_user):
+    profile = Profile.objects.get_or_create(user=user, defaults={"display_name": user.username})[0]
+    can_view_details = can_view_profile(request_user, user)
+    is_following = False
+    follow_request_status = ""
+    if request_user and request_user.is_authenticated and request_user != user:
+        is_following = Follow.objects.filter(follower=request_user, following=user).exists()
+        follow_request_status = get_follow_request_status(request_user, user)
+    return {
+        "user": user,
+        "profile": profile,
+        "display_name": profile.display_name or user.username,
+        "followers_count": Follow.objects.filter(following=user).count(),
+        "can_follow": bool(request_user and request_user.is_authenticated and request_user != user),
+        "is_following": is_following,
+        "follow_request_status": follow_request_status,
+        "is_private": profile.is_private,
+        "can_view_profile_details": can_view_details,
+    }
+
+
+def can_edit_yearly_goal(user, goal):
+    if not goal.year_plan_id:
+        return user.is_authenticated and goal.user_id == user.id
+    return can_edit_year_plan_items(user, goal.year_plan)
+
+
+def year_plan_item_limit_reached(plan):
+    return plan.target_count > 0 and plan.goals.count() >= plan.target_count
+
+
+def item_limit_message():
+    return "このリストは設定した目標件数に達しています。"
+
+
+def media_file_is_referenced(name, *, profile_pk=None, goal_image_pk=None):
+    if not name:
+        return False
+    profiles = Profile.objects.filter(icon=name)
+    if profile_pk is not None:
+        profiles = profiles.exclude(pk=profile_pk)
+    if profiles.exists():
+        return True
+    images = GoalImage.objects.filter(image=name)
+    if goal_image_pk is not None:
+        images = images.exclude(pk=goal_image_pk)
+    return images.exists()
+
+
+def delete_media_file_if_unreferenced(name, storage, *, profile_pk=None, goal_image_pk=None):
+    if not name or storage is None:
+        return
+    if media_file_is_referenced(name, profile_pk=profile_pk, goal_image_pk=goal_image_pk):
+        return
+    try:
+        if storage.exists(name):
+            storage.delete(name)
+    except OSError:
+        pass
+
+
 def progress_percent(done_count, total_count):
     if total_count <= 0:
         return 0
     return min(round(done_count / total_count * 100), 100)
 
 
-def profile_stats(user):
+def profile_stats(user, viewer=None):
+    viewer = viewer or user
+    if not can_view_profile(viewer, user):
+        return None
     public_plans = YearPlan.objects.filter(user=user, is_public=True)
     goals = YearlyGoal.objects.filter(user=user)
     return {
@@ -894,6 +1045,15 @@ def profile_stats(user):
 
 def get_template(slug):
     return next((template for template in LIST_TEMPLATES if template["slug"] == slug), None)
+
+
+def template_card(template):
+    usage_count = YearPlan.objects.filter(template_slug=template["slug"]).count()
+    return {
+        **template,
+        "usage_count": usage_count,
+        "usage_label": f"{template['target_count']}項目",
+    }
 
 
 def home(request):
@@ -935,15 +1095,174 @@ def home(request):
     return render(request, "goals/home.html", context)
 
 
+@never_cache
+def service_worker(request):
+    return HttpResponse("self.addEventListener('fetch', () => {});", content_type="application/javascript")
+
+
+def create_hub(request):
+    return render(request, "goals/create_hub.html")
+
+
+@staff_member_required
+def staff_dashboard(request):
+    return render(request, "goals/staff_dashboard.html", {
+        "user_count": get_user_model().objects.count(),
+        "list_count": YearPlan.objects.count(),
+        "item_count": YearlyGoal.objects.count(),
+    })
+
+
+def management_chart_rows(start_date, end_date):
+    rows_by_date = {
+        row["date_joined__date"]: row["count"]
+        for row in get_user_model().objects.filter(date_joined__date__gte=start_date, date_joined__date__lte=end_date)
+        .values("date_joined__date").annotate(count=Count("id"))
+    }
+    dates = []
+    current = start_date
+    while current <= end_date:
+        dates.append(current)
+        current += timedelta(days=1)
+    max_count = max([rows_by_date.get(day, 0) for day in dates] + [1])
+    width, height = 720, 220
+    usable_width, usable_height = 652, 164
+    rows = []
+    for index, day in enumerate(dates):
+        x = 34 + (usable_width * index / max(len(dates) - 1, 1))
+        count = rows_by_date.get(day, 0)
+        y = 192 - (usable_height * count / max_count)
+        rows.append({"date": day, "count": count, "x": round(x, 1), "y": round(y, 1)})
+    return {"width": width, "height": height, "rows": rows, "points": " ".join(f"{row['x']},{row['y']}" for row in rows)}
+
+
+@staff_member_required
+def management_dashboard(request):
+    today = timezone.localdate()
+    period = request.GET.get("period", "30")
+    days = {"7": 7, "30": 30, "90": 90}.get(period, 30)
+    start_date = today - timedelta(days=days - 1)
+    users = get_user_model().objects.all()
+    kpis = [
+        {"label": "総ユーザー数", "value": users.count()},
+        {"label": "今日の新規登録", "value": users.filter(date_joined__date=today).count()},
+        {"label": "過去7日間の新規登録", "value": users.filter(date_joined__date__gte=today - timedelta(days=6)).count()},
+        {"label": "過去30日間の新規登録", "value": users.filter(date_joined__date__gte=today - timedelta(days=29)).count()},
+        {"label": "総リスト数", "value": YearPlan.objects.count()},
+        {"label": "総リスト項目数", "value": YearlyGoal.objects.count()},
+        {"label": "達成済み項目数", "value": YearlyGoal.objects.filter(is_done=True).count()},
+    ]
+    usage_stats = [
+        {"label": "本日作成されたリスト", "value": YearPlan.objects.filter(created_at__date=today).count()},
+        {"label": "過去7日間に作成されたリスト", "value": YearPlan.objects.filter(created_at__date__gte=today - timedelta(days=6)).count()},
+        {"label": "本日追加された項目", "value": YearlyGoal.objects.filter(created_at__date=today).count()},
+        {"label": "過去7日間に追加された項目", "value": YearlyGoal.objects.filter(created_at__date__gte=today - timedelta(days=6)).count()},
+        {"label": "本日達成された項目", "value": YearlyGoal.objects.filter(completed_date=today).count()},
+        {"label": "過去7日間に達成された項目", "value": YearlyGoal.objects.filter(completed_date__gte=today - timedelta(days=6)).count()},
+    ]
+    recent_activities = [
+        {"at": item.created_at or item.updated_at, "label": "リスト作成", "detail": item.list_title or "マイリスト"}
+        for item in YearPlan.objects.select_related("user").order_by("-created_at", "-updated_at")[:5]
+    ]
+    return render(request, "goals/management/dashboard.html", {
+        "kpis": kpis,
+        "usage_stats": usage_stats,
+        "chart": management_chart_rows(start_date, today),
+        "recent_activities": recent_activities,
+        "data_notes": ["DAU/WAU/MAUはUserActivityが蓄積された範囲で今後拡張できます。"],
+    })
+
+
+@staff_member_required
+def management_users(request):
+    query = request.GET.get("q", "").strip()
+    sort = request.GET.get("sort", "new")
+    users = get_user_model().objects.select_related("profile").annotate(
+        list_count=Count("year_plans", distinct=True),
+        item_count=Count("yearly_goals", distinct=True),
+        done_item_count=Count("yearly_goals", filter=Q(yearly_goals__is_done=True), distinct=True),
+        last_activity_at=Max("wishly_activity__last_seen_at"),
+    )
+    if query:
+        users = users.filter(Q(username__icontains=query) | Q(email__icontains=query))
+    users = users.order_by("date_joined" if sort == "old" else "-date_joined")
+    return render(request, "goals/management/users.html", {
+        "page_obj": Paginator(users, 30).get_page(request.GET.get("page")),
+        "query": query,
+        "sort": sort,
+    })
+
+
+@staff_member_required
+def management_user_detail(request, pk):
+    managed_user = get_object_or_404(get_user_model().objects.select_related("profile"), pk=pk)
+    managed_user.last_activity_at = UserActivity.objects.filter(user=managed_user).aggregate(Max("last_seen_at"))["last_seen_at__max"]
+    stats = {
+        "リスト数": YearPlan.objects.filter(user=managed_user).count(),
+        "項目数": YearlyGoal.objects.filter(user=managed_user).count(),
+        "達成数": YearlyGoal.objects.filter(user=managed_user, is_done=True).count(),
+        "フォロー数": Follow.objects.filter(follower=managed_user).count(),
+        "フォロワー数": Follow.objects.filter(following=managed_user).count(),
+        "いいねした数": LikeList.objects.filter(user=managed_user).count(),
+        "保存したリスト数": SavedList.objects.filter(user=managed_user).count(),
+        "保存した項目数": SavedItem.objects.filter(user=managed_user).count(),
+    }
+    return render(request, "goals/management/user_detail.html", {"managed_user": managed_user, "stats": stats})
+
+
+@staff_member_required
+def management_lists(request):
+    query = request.GET.get("q", "").strip()
+    visibility = request.GET.get("visibility", "all")
+    lists = YearPlan.objects.select_related("user").annotate(
+        item_count=Count("goals", distinct=True),
+        done_count=Count("goals", filter=Q(goals__is_done=True), distinct=True),
+        like_count=Count("liked_by", distinct=True),
+        save_count=Count("saved_by", distinct=True),
+    )
+    if query:
+        lists = lists.filter(Q(list_title__icontains=query) | Q(user__username__icontains=query))
+    if visibility == "public":
+        lists = lists.filter(is_public=True)
+    elif visibility == "private":
+        lists = lists.filter(is_public=False)
+    lists = lists.order_by("-created_at", "-updated_at")
+    return render(request, "goals/management/lists.html", {
+        "page_obj": Paginator(lists, 30).get_page(request.GET.get("page")),
+        "query": query,
+        "visibility": visibility,
+    })
+
+
+@staff_member_required
+def management_templates(request):
+    sort = request.GET.get("sort", "usage_desc")
+    templates = []
+    for template in LIST_TEMPLATES:
+        usage_count = YearPlan.objects.filter(template_slug=template["slug"]).count()
+        templates.append({
+            **template,
+            "category_label": template.get("category", ""),
+            "item_count": len(template.get("items", [])),
+            "usage_count": usage_count,
+            "usage_label": usage_count,
+        })
+    templates.sort(key=lambda item: item["usage_count"], reverse=(sort != "usage_asc"))
+    return render(request, "goals/management/templates.html", {"templates": templates, "sort": sort})
+
+
 def signup(request):
     if request.method == "POST":
         form = SignUpForm(request.POST)
         if form.is_valid():
-            user = form.save()
-            Profile.objects.get_or_create(user=user, defaults={"display_name": user.username})
-            login(request, user)
-            messages.success(request, "新規登録しました。")
-            return redirect("goals:my_profile")
+            try:
+                user = form.save()
+            except IntegrityError:
+                form.add_error("username", USERNAME_DUPLICATE_ERROR)
+            else:
+                login(request, user)
+                messages.success(request, "新規登録しました。")
+                return redirect("goals:my_profile")
     else:
         form = SignUpForm()
     return render(request, "goals/form.html", {
@@ -986,6 +1305,8 @@ def my_profile(request):
         "is_own_profile": True,
         "profile_stats": profile_stats(request.user),
         "is_following": False,
+        "follow_request_status": "",
+        "can_view_profile_details": True,
         "my_list_page_obj": my_list_page_obj,
         "my_plans": my_list_page_obj.object_list,
         "list_filter": list_filter,
@@ -1001,29 +1322,172 @@ def edit_profile(request):
         defaults={"display_name": request.user.username},
     )
     if request.method == "POST":
-        form = ProfileForm(request.POST, request.FILES, instance=profile)
+        old_icon_name = profile.icon.name if profile.icon else ""
+        old_icon_storage = profile.icon.storage if profile.icon else None
+        form = ProfileForm(request.POST, request.FILES, instance=profile, user=request.user)
         if form.is_valid():
             profile_obj = form.save(commit=False)
-            crop_data = form.cleaned_data.get("avatar_crop_data", "")
-            if crop_data.startswith("data:image"):
-                try:
-                    header, encoded = crop_data.split(",", 1)
-                    image_format = header.split(";")[0].split("/")[-1]
-                    if image_format == "jpeg":
-                        image_format = "jpg"
-                    filename = f"profile-{request.user.pk}-{uuid.uuid4().hex}.{image_format}"
-                    profile_obj.icon.save(filename, ContentFile(base64.b64decode(encoded)), save=False)
-                except (ValueError, TypeError, binascii.Error):
-                    messages.warning(request, "プロフィール画像の切り抜きデータを読み込めませんでした。")
-            profile_obj.save()
+            avatar_file = getattr(form, "processed_avatar_file", None)
+            if avatar_file is not None:
+                profile_obj.icon = avatar_file
+            try:
+                new_username = form.cleaned_data.get("username")
+                if new_username and request.user.username != new_username:
+                    request.user.username = new_username
+                    request.user.save(update_fields=["username"])
+                profile_obj.save()
+            except IntegrityError:
+                form.add_error("username", USERNAME_DUPLICATE_ERROR)
+                return render(request, "goals/profile_form.html", {
+                    "form": form,
+                    "profile": profile,
+                })
+            new_icon_name = profile_obj.icon.name if profile_obj.icon else ""
+            if old_icon_name and old_icon_name != new_icon_name:
+                delete_media_file_if_unreferenced(old_icon_name, old_icon_storage, profile_pk=profile_obj.pk)
             messages.success(request, "プロフィールを保存しました。")
             return redirect("goals:my_profile")
     else:
-        form = ProfileForm(instance=profile)
+        form = ProfileForm(instance=profile, user=request.user)
     return render(request, "goals/profile_form.html", {
         "form": form,
         "profile": profile,
     })
+
+
+@login_required
+def account_settings(request):
+    profile, _ = Profile.objects.get_or_create(user=request.user, defaults={"display_name": request.user.username})
+    if request.method == "POST":
+        form = ProfilePrivacyToggleForm(request.POST, instance=profile)
+        if form.is_valid():
+            form.save()
+            if request.headers.get("x-requested-with") == "XMLHttpRequest":
+                return JsonResponse({"ok": True, "is_private": profile.is_private})
+            messages.success(request, "保存しました。")
+            return redirect("goals:account_settings")
+        if request.headers.get("x-requested-with") == "XMLHttpRequest":
+            return JsonResponse({"ok": False, "errors": form.errors}, status=400)
+    else:
+        form = ProfilePrivacyToggleForm(instance=profile)
+    return render(request, "goals/account_settings.html", {
+        "profile": profile,
+        "privacy_form": form,
+    })
+
+
+@login_required
+def account_email_change(request):
+    if request.method == "POST":
+        form = AccountEmailChangeForm(request.POST, user=request.user)
+        if form.is_valid():
+            request.user.email = form.cleaned_data["email"]
+            request.user.save(update_fields=["email"])
+            profile, _ = Profile.objects.get_or_create(user=request.user, defaults={"display_name": request.user.username})
+            profile.email_verified = False
+            profile.save(update_fields=["email_verified"])
+            messages.success(request, "メールアドレスを変更しました。")
+            return redirect("goals:account_settings")
+    else:
+        form = AccountEmailChangeForm(user=request.user)
+    return render(request, "goals/account_email_change.html", {"form": form})
+
+
+@require_POST
+@login_required
+def resend_verification_email(request):
+    messages.info(request, "認証メールの再送はメール設定完了後に利用できます。")
+    return redirect("goals:account_settings")
+
+
+@login_required
+def account_delete(request):
+    if request.method == "POST":
+        user = request.user
+        logout(request)
+        user.is_active = False
+        user.save(update_fields=["is_active"])
+        return redirect("goals:home")
+    return render(request, "goals/account_delete.html")
+
+
+@login_required
+def privacy_settings(request):
+    profile, _ = Profile.objects.get_or_create(user=request.user, defaults={"display_name": request.user.username})
+    if request.method == "POST":
+        form = ProfilePrivacyForm(request.POST, instance=profile)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "プライバシー設定を保存しました。")
+            return redirect("goals:account_settings")
+    else:
+        form = ProfilePrivacyForm(instance=profile)
+    return render(request, "goals/privacy_settings.html", {"form": form, "profile": profile})
+
+
+@login_required
+def notifications_page(request):
+    category = request.GET.get("category", "all")
+    valid_categories = {"all", "follow", "collaboration", "like", "save"}
+    if category not in valid_categories:
+        category = "all"
+    follow_requests = FollowRequest.objects.filter(target=request.user, status=FollowRequest.STATUS_PENDING).select_related("requester", "requester__profile")
+    collaboration_invites = CollaborationInvite.objects.filter(invitee=request.user, status=CollaborationInvite.STATUS_PENDING).select_related("inviter", "inviter__profile", "list")
+    like_notifications = LikeList.objects.filter(my_list__user=request.user).exclude(user=request.user).select_related("user", "user__profile", "my_list").order_by("-created_at")[:20]
+    save_notifications = SavedList.objects.filter(my_list__user=request.user).exclude(user=request.user).select_related("user", "user__profile", "my_list").order_by("-created_at")[:20]
+    tabs = [
+        {"key": "all", "label": "すべて", "count": follow_requests.count() + collaboration_invites.count()},
+        {"key": "follow", "label": "フォロー", "count": follow_requests.count()},
+        {"key": "collaboration", "label": "共同リスト", "count": collaboration_invites.count()},
+        {"key": "like", "label": "いいね", "count": like_notifications.count() if hasattr(like_notifications, "count") else 0},
+        {"key": "save", "label": "保存", "count": save_notifications.count() if hasattr(save_notifications, "count") else 0},
+    ]
+    return render(request, "goals/notifications.html", {
+        "notification_category": category,
+        "notification_tabs": tabs,
+        "follow_requests": follow_requests,
+        "collaboration_invites": collaboration_invites,
+        "like_notifications": like_notifications,
+        "save_notifications": save_notifications,
+    })
+
+
+@login_required
+def follow_requests_page(request):
+    return notifications_page(request)
+
+
+@require_POST
+@login_required
+def respond_follow_request(request, pk, status):
+    follow_request = get_object_or_404(FollowRequest, pk=pk, target=request.user, status=FollowRequest.STATUS_PENDING)
+    if status == FollowRequest.STATUS_ACCEPTED:
+        Follow.objects.get_or_create(follower=follow_request.requester, following=request.user)
+        follow_request.status = FollowRequest.STATUS_ACCEPTED
+    elif status == FollowRequest.STATUS_REJECTED:
+        follow_request.status = FollowRequest.STATUS_REJECTED
+    else:
+        raise PermissionDenied
+    follow_request.save(update_fields=["status", "updated_at"])
+    return redirect(request.META.get("HTTP_REFERER") or reverse("goals:notifications"))
+
+
+@require_POST
+@login_required
+def respond_collaboration_invite(request, pk, status):
+    invite = get_object_or_404(CollaborationInvite, pk=pk, invitee=request.user, status=CollaborationInvite.STATUS_PENDING)
+    if status == CollaborationInvite.STATUS_ACCEPTED:
+        invite.status = CollaborationInvite.STATUS_ACCEPTED
+        invite.responded_at = timezone.now()
+        invite.list.collaborators.add(request.user)
+        invite.save(update_fields=["status", "responded_at"])
+    elif status == CollaborationInvite.STATUS_DECLINED:
+        invite.status = CollaborationInvite.STATUS_DECLINED
+        invite.responded_at = timezone.now()
+        invite.save(update_fields=["status", "responded_at"])
+    else:
+        raise PermissionDenied
+    return redirect(request.META.get("HTTP_REFERER") or reverse("goals:notifications"))
 
 
 def profile_detail(request, username):
@@ -1031,55 +1495,93 @@ def profile_detail(request, username):
     profile, _ = Profile.objects.get_or_create(user=user, defaults={"display_name": user.username})
     if request.user.is_authenticated and request.user == user:
         return redirect("goals:my_profile")
-    public_plans = YearPlan.objects.filter(user=user, is_public=True).select_related("user", "user__profile").order_by("-updated_at", "-pk")
-    goal_groups = build_public_list_groups(public_plans, request.user, request=request)
+    can_view_profile_details = can_view_profile(request.user, user)
+    public_plans = YearPlan.objects.none()
+    goal_groups = []
+    if can_view_profile_details:
+        public_plans = YearPlan.objects.filter(user=user, is_public=True).select_related("user", "user__profile").order_by("-updated_at", "-pk")
+        goal_groups = build_public_list_groups(public_plans, request.user, request=request)
     is_following = False
+    follow_request_status = ""
     if request.user.is_authenticated:
         is_following = Follow.objects.filter(follower=request.user, following=user).exists()
+        follow_request_status = get_follow_request_status(request.user, user)
     return render(request, "goals/profile.html", {
         "profile_user": user,
         "profile": profile,
         "goal_groups": goal_groups,
         "is_own_profile": False,
-        "profile_stats": profile_stats(user),
+        "can_view_profile_details": can_view_profile_details,
+        "profile_stats": profile_stats(user, request.user),
         "is_following": is_following,
+        "follow_request_status": follow_request_status,
         "profile_share_url": request.build_absolute_uri(reverse("goals:profile_detail", kwargs={"username": user.username})),
     })
 
 
 @login_required
 def yearly_goal_list(request):
-    query = request.GET.get("q", "").strip()
-    matching_plans = YearPlan.objects.filter(user=request.user)
-    if query:
-        matching_plan_ids = matching_plans.filter(
-            Q(list_title__icontains=query) | Q(goals__title__icontains=query)
-        ).values("pk")
-        matching_plans = YearPlan.objects.filter(user=request.user, pk__in=matching_plan_ids)
+    timeline_filter = request.GET.get("type", "all")
+    if timeline_filter not in {"all", "achievement", "share"}:
+        timeline_filter = "all"
 
-    plans = matching_plans.annotate(
-        goals_count=Count("goals"),
-        goals_done_count=Count("goals", filter=Q(goals__is_done=True)),
-    ).distinct().order_by("-updated_at", "-pk")
-    plans = list(plans)
-    for plan in plans:
-        plan.progress_percent = progress_percent(plan.goals_done_count, plan.goals_count)
-    paginator = Paginator(plans, 5)
+    following_ids = Follow.objects.filter(follower=request.user).values_list("following_id", flat=True)
+    timeline_plans = YearPlan.objects.filter(
+        user_id__in=following_ids,
+        is_public=True,
+    ).select_related("user", "user__profile").annotate(
+        public_goal_count=Count("goals", filter=Q(goals__item_is_public=True)),
+        public_done_count=Count("goals", filter=Q(goals__item_is_public=True, goals__is_done=True)),
+        latest_public_goal_at=Max("goals__updated_at", filter=Q(goals__item_is_public=True)),
+    ).filter(public_goal_count__gt=0)
+
+    if timeline_filter == "achievement":
+        timeline_plans = timeline_plans.filter(public_done_count__gt=0)
+    elif timeline_filter == "share":
+        timeline_plans = timeline_plans.filter(public_done_count=0)
+
+    timeline_plans = timeline_plans.distinct().order_by("-updated_at", "-latest_public_goal_at", "-pk")
+    paginator = Paginator(timeline_plans, 10)
     page_obj = paginator.get_page(request.GET.get("page"))
-    page_query = urlencode({"q": query}) if query else ""
+    timeline_groups = build_public_list_groups(page_obj.object_list, request.user, request=request)
+    latest_goal_filter = Q(item_is_public=True)
+    if timeline_filter == "achievement":
+        latest_goal_filter &= Q(is_done=True)
+    latest_goals = {}
+    for goal in YearlyGoal.objects.filter(
+        year_plan_id__in=[group["plan"].pk for group in timeline_groups],
+    ).filter(latest_goal_filter).select_related("year_plan").order_by("year_plan_id", "-updated_at", "-pk"):
+        latest_goals.setdefault(goal.year_plan_id, goal)
+    for group in timeline_groups:
+        latest_goal = latest_goals.get(group["plan"].pk)
+        if latest_goal and latest_goal.is_done:
+            group["timeline_type"] = "achievement"
+            group["timeline_badge"] = "達成"
+            group["timeline_action"] = f"「{latest_goal.title}」を達成しました"
+        else:
+            group["timeline_type"] = "share"
+            group["timeline_badge"] = "公開"
+            group["timeline_action"] = f"「{group['list_title']}」を更新しました"
+
     return render(request, "goals/yearly_goal_list.html", {
         "page_obj": page_obj,
-        "plans": page_obj.object_list,
-        "query": query,
-        "page_query": page_query,
+        "timeline_groups": timeline_groups,
+        "timeline_filter": timeline_filter,
     })
 
 
 @login_required
 def my_list_detail(request, pk):
-    year_plan = get_object_or_404(YearPlan, pk=pk, user=request.user)
+    year_plan = get_object_or_404(
+        YearPlan.objects.select_related("user", "user__profile").prefetch_related("collaborators", "collaborators__profile"),
+        pk=pk,
+    )
+    if not can_view_year_plan(request.user, year_plan):
+        raise PermissionDenied
 
     if request.method == "POST":
+        if not can_manage_year_plan(request.user, year_plan):
+            raise PermissionDenied
         setting_form = YearPlanForm(request.POST, instance=year_plan)
         if setting_form.is_valid():
             setting_form.save()
@@ -1088,13 +1590,15 @@ def my_list_detail(request, pk):
     else:
         setting_form = YearPlanForm(instance=year_plan)
 
-    all_goals = YearlyGoal.objects.filter(user=request.user, year_plan=year_plan).prefetch_related(
+    all_goals = YearlyGoal.objects.filter(year_plan=year_plan).select_related(
+        "added_by", "added_by__profile", "completed_by", "completed_by__profile",
+    ).prefetch_related(
         "monthly_goals__weekly_goals__today_tasks",
     ).order_by("created_at")
     goals = all_goals
     done_count = all_goals.filter(is_done=True).count()
     total_count = all_goals.count()
-    year_plan.progress_percent = progress_percent(done_count, total_count)
+    year_plan.progress_percent = progress_percent(done_count, year_plan.target_count)
     total_pages = max(ceil(goals.count() / 20), 1)
     try:
         current_page = int(request.GET.get("page", "1"))
@@ -1115,11 +1619,20 @@ def my_list_detail(request, pk):
         "done_count": done_count,
         "total_count": total_count,
         "remaining_count": max(year_plan.target_count - total_count, 0),
+        "member_count": 1 + year_plan.collaborators.count(),
         "current_page": current_page,
         "total_pages": total_pages,
         "previous_page": current_page - 1 if current_page > 1 else None,
         "next_page": current_page + 1 if current_page < total_pages else None,
         "current_year": year_plan.year,
+        "can_manage_list": can_manage_year_plan(request.user, year_plan),
+        "can_edit_items": can_edit_year_plan_items(request.user, year_plan),
+        "target_limit_reached": year_plan_item_limit_reached(year_plan),
+        "like_count": year_plan.liked_by.count(),
+        "save_count": year_plan.saved_by.count(),
+        "share_count": getattr(year_plan, "share_count", 0),
+        "is_liked": LikeList.objects.filter(user=request.user, my_list=year_plan).exists(),
+        "is_saved": SavedList.objects.filter(user=request.user, my_list=year_plan).exists(),
     }
     return render(request, "goals/my_list_detail.html", context)
 
@@ -1144,19 +1657,27 @@ def yearly_goal_detail(request, pk):
 @require_POST
 @login_required
 def add_my_list_goal_inline(request, pk):
-    year_plan = get_object_or_404(YearPlan, pk=pk, user=request.user)
+    year_plan = get_object_or_404(YearPlan, pk=pk)
+    if not can_edit_year_plan_items(request.user, year_plan):
+        raise PermissionDenied
     form = YearlyGoalInlineCreateForm(request.POST)
     is_ajax = request.headers.get("x-requested-with") == "XMLHttpRequest"
+    if year_plan_item_limit_reached(year_plan):
+        if is_ajax:
+            return JsonResponse({"ok": False, "errors": {"__all__": [item_limit_message()]}}, status=400)
+        messages.error(request, item_limit_message())
+        return redirect("goals:my_list_detail", pk=year_plan.pk)
     if form.is_valid():
         goal = form.save(commit=False)
-        goal.user = request.user
+        goal.user = year_plan.user
         goal.year_plan = year_plan
+        goal.added_by = request.user
         goal.save()
         touch_year_plan(year_plan)
         if is_ajax:
             html = render_to_string(
                 "goals/partials/yearly_notebook_goal.html",
-                {"goal": goal},
+                {"goal": goal, "setting": year_plan},
                 request=request,
             )
             return JsonResponse({
@@ -1287,6 +1808,9 @@ def build_public_list_groups(plans, request_user=None, category="", request=None
             "is_saved": False,
             "is_liked": False,
             "can_react": bool(request_user and request_user.is_authenticated and request_user != plan.user),
+            "can_follow": bool(request_user and request_user.is_authenticated and request_user != plan.user),
+            "is_private": bool(profile and profile.is_private),
+            "follow_request_status": "",
             "show_item_privacy": include_private,
             "comment_form": ListCommentForm(),
             "comments": plan.comments.select_related("user", "user__profile").all(),
@@ -1309,6 +1833,7 @@ def build_public_list_groups(plans, request_user=None, category="", request=None
             group["is_saved"] = plan_id in saved_plan_ids
             group["is_liked"] = plan_id in liked_plan_ids
             group["is_following"] = group["user"].pk in following_user_ids
+            group["follow_request_status"] = get_follow_request_status(request_user, group["user"])
     else:
         saved_item_ids = set()
         wanted_item_ids = set()
@@ -1355,9 +1880,13 @@ def build_public_list_groups(plans, request_user=None, category="", request=None
 
 def public_goal_list(request):
     query = request.GET.get("q", "").strip()
+    result_type = request.GET.get("type", "lists")
+    is_search_mode = bool(query)
+    popular_keywords = ["カフェ", "旅行", "京都", "夏", "読書", "健康", "お金"]
     public_plans = YearPlan.objects.filter(is_public=True).select_related("user", "user__profile").annotate(
         public_goal_count=Count("goals", filter=Q(goals__item_is_public=True)),
     ).filter(public_goal_count__gt=0)
+    public_plans = public_plans.filter(visible_public_plan_filter(request.user))
 
     if query:
         public_plans = public_plans.filter(
@@ -1373,16 +1902,44 @@ def public_goal_list(request):
     query_params = {}
     if query:
         query_params["q"] = query
+    if result_type:
+        query_params["type"] = result_type
     page_query = urlencode(query_params)
     grouped_goals = build_public_list_groups(page_obj.object_list, request.user, request=request)
+
+    users_qs = get_user_model().objects.exclude(pk=getattr(request.user, "pk", None)).filter(
+        profile__is_private=False,
+    ).select_related("profile").annotate(
+        followers_count=Count("follower_relations"),
+    )
+    if query:
+        users_qs = users_qs.filter(Q(username__icontains=query) | Q(profile__display_name__icontains=query))
+    users_qs = users_qs.order_by("-followers_count", "username")
+    user_paginator = Paginator(users_qs, 10)
+    user_page_obj = user_paginator.get_page(request.GET.get("page"))
+    user_results = [build_user_row(user, request.user) for user in user_page_obj.object_list]
+    recommended_users = [
+        build_user_row(user, request.user)
+        for user in get_user_model().objects.exclude(pk=getattr(request.user, "pk", None)).filter(
+            profile__is_private=False,
+        ).select_related("profile").annotate(
+            followers_count=Count("follower_relations"),
+        ).order_by("-followers_count", "username")[:6]
+    ]
 
     context = {
         "goal_groups": grouped_goals,
         "page_obj": page_obj,
+        "user_page_obj": user_page_obj,
         "page_query": page_query,
         "public_count": public_plans.count(),
         "done_count": sum(group["done_count"] for group in grouped_goals),
         "query": query,
+        "popular_keywords": popular_keywords,
+        "recommended_users": recommended_users,
+        "user_results": user_results,
+        "is_search_mode": is_search_mode,
+        "result_type": result_type,
     }
     return render(request, "goals/public_goal_list.html", context)
 
@@ -1391,7 +1948,7 @@ def public_list_detail(request, pk):
     plan = get_object_or_404(
         YearPlan.objects.filter(is_public=True).select_related("user", "user__profile").annotate(
             public_goal_count=Count("goals", filter=Q(goals__item_is_public=True)),
-        ).filter(public_goal_count__gt=0),
+        ).filter(public_goal_count__gt=0).filter(visible_public_plan_filter(request.user)),
         pk=pk,
     )
     groups = build_public_list_groups([plan], request.user, request=request)
@@ -1402,10 +1959,10 @@ def public_list_detail(request, pk):
 
 def public_goal_detail(request, pk):
     goal = get_object_or_404(
-        YearlyGoal.objects.select_related("year_plan", "year_plan__user", "year_plan__user__profile"),
+        YearlyGoal.objects.select_related("year_plan", "year_plan__user", "year_plan__user__profile").filter(
+            visible_public_goal_filter(request.user),
+        ),
         pk=pk,
-        item_is_public=True,
-        year_plan__is_public=True,
     )
     year_plan = goal.year_plan
     is_saved_item = False
@@ -1428,6 +1985,8 @@ def saved_list_page(request):
     saved = SavedList.objects.filter(
         user=request.user,
         my_list__is_public=True,
+    ).filter(
+        visible_public_plan_filter(request.user, prefix="my_list__")
     ).select_related("my_list", "my_list__user", "my_list__user__profile").order_by("-created_at")
     plans = [item.my_list for item in saved]
     paginator = Paginator(plans, 5)
@@ -1446,6 +2005,8 @@ def saved_item_page(request):
         user=request.user,
         item__item_is_public=True,
         item__year_plan__is_public=True,
+    ).filter(
+        visible_public_plan_filter(request.user, prefix="item__year_plan__")
     ).select_related("item", "item__year_plan", "item__year_plan__user", "item__year_plan__user__profile").order_by("-created_at")
     paginator = Paginator(saved_items, 10)
     page_obj = paginator.get_page(request.GET.get("page"))
@@ -1480,7 +2041,7 @@ def following_users_page(request):
     following = get_user_model().objects.filter(
         follower_relations__follower=request.user,
     ).select_related("profile").order_by("username")
-    user_rows = [{"user": user, "profile": Profile.objects.get_or_create(user=user)[0]} for user in following]
+    user_rows = [build_user_row(user, request.user) for user in following]
     return render(request, "goals/follow_user_list.html", {
         "user_rows": user_rows,
         "page_heading": "フォロー",
@@ -1493,7 +2054,7 @@ def followers_page(request):
     followers = get_user_model().objects.filter(
         following_relations__following=request.user,
     ).select_related("profile").order_by("username")
-    user_rows = [{"user": user, "profile": Profile.objects.get_or_create(user=user)[0]} for user in followers]
+    user_rows = [build_user_row(user, request.user) for user in followers]
     return render(request, "goals/follow_user_list.html", {
         "user_rows": user_rows,
         "page_heading": "フォロワー",
@@ -1511,10 +2072,17 @@ def toggle_follow(request, username):
         follow = Follow.objects.filter(follower=request.user, following=target).first()
         if follow:
             follow.delete()
-            messages.success(request, "フォローを解除しました。")
+            FollowRequest.objects.filter(requester=request.user, target=target).delete()
         else:
-            Follow.objects.create(follower=request.user, following=target)
-            messages.success(request, "フォローしました。")
+            target_profile = getattr(target, "profile", None)
+            if target_profile and target_profile.is_private:
+                FollowRequest.objects.update_or_create(
+                    requester=request.user,
+                    target=target,
+                    defaults={"status": FollowRequest.STATUS_PENDING},
+                )
+            else:
+                Follow.objects.create(follower=request.user, following=target)
     return redirect(request.META.get("HTTP_REFERER") or reverse("goals:profile_detail", kwargs={"username": username}))
 
 
@@ -1522,6 +2090,8 @@ def toggle_follow(request, username):
 @login_required
 def toggle_saved_list(request, pk):
     plan = get_object_or_404(YearPlan, pk=pk, is_public=True)
+    if not can_view_list(request.user, plan):
+        raise PermissionDenied
     if plan.user == request.user:
         messages.info(request, "自分のリストは保存対象外です。")
     else:
@@ -1544,6 +2114,8 @@ def toggle_saved_item(request, pk):
         item_is_public=True,
         year_plan__is_public=True,
     )
+    if not can_view_yearly_goal(request.user, item):
+        raise PermissionDenied
     if item.user == request.user or item.year_plan.user == request.user:
         messages.info(request, "自分の項目は保存対象外です。")
     else:
@@ -1561,6 +2133,8 @@ def toggle_saved_item(request, pk):
 @login_required
 def toggle_like_list(request, pk):
     plan = get_object_or_404(YearPlan, pk=pk, is_public=True)
+    if not can_view_list(request.user, plan):
+        raise PermissionDenied
     if plan.user == request.user:
         messages.info(request, "自分のリストはいいね対象外です。")
     else:
@@ -1574,14 +2148,70 @@ def toggle_like_list(request, pk):
     return redirect(request.META.get("HTTP_REFERER") or reverse("goals:public_goal_list"))
 
 
+@require_POST
+def record_list_share(request, pk):
+    plan = get_object_or_404(YearPlan.objects.select_related("user"), pk=pk)
+    if not can_view_year_plan(request.user, plan):
+        raise PermissionDenied
+    YearPlan.objects.filter(pk=plan.pk).update(share_count=F("share_count") + 1)
+    plan.refresh_from_db(fields=["share_count"])
+    return JsonResponse({"share_count": plan.share_count})
+
+
 def template_list(request):
-    return render(request, "goals/template_list.html", {"templates": LIST_TEMPLATES})
+    query = request.GET.get("q", "").strip()
+    selected_category = request.GET.get("category", "all").strip() or "all"
+    available_categories = {template.get("category", "その他") for template in LIST_TEMPLATES}
+    template_categories = [category for category in TEMPLATE_CATEGORIES if category in available_categories]
+    if selected_category not in {"all", *template_categories}:
+        selected_category = "all"
+
+    filtered_templates = LIST_TEMPLATES
+    if selected_category != "all":
+        filtered_templates = [
+            template for template in filtered_templates
+            if template.get("category") == selected_category
+        ]
+    if query:
+        query_lower = query.lower()
+        category_labels = dict(YearlyGoal.CATEGORY_CHOICES)
+        filtered_templates = [
+            template for template in filtered_templates
+            if query_lower in template["title"].lower()
+            or query_lower in template.get("summary", "").lower()
+            or query_lower in category_labels.get(template.get("category"), template.get("category", "")).lower()
+            or query_lower in template.get("category", "").lower()
+            or any(query_lower in title.lower() for title, _category in template["items"])
+        ]
+
+    cards = [template_card(template) for template in filtered_templates]
+    cards.sort(key=lambda template: (template["usage_count"], template.get("target_count", 0), template["title"]), reverse=True)
+    paginator = Paginator(cards, max(len(cards), 1))
+    page_obj = paginator.get_page(request.GET.get("page"))
+    page_query_params = {}
+    if query:
+        page_query_params["q"] = query
+    if selected_category != "all":
+        page_query_params["category"] = selected_category
+
+    return render(request, "goals/template_list.html", {
+        "templates": page_obj.object_list,
+        "popular_templates": page_obj.object_list,
+        "new_templates": [],
+        "template_categories": template_categories,
+        "selected_category": selected_category,
+        "query": query,
+        "is_search_mode": bool(query),
+        "page_obj": page_obj,
+        "page_query": urlencode(page_query_params),
+    })
 
 
 def template_detail(request, slug):
     template = get_template(slug)
     if template is None:
         return redirect("goals:template_list")
+    template = template_card(template)
     category_labels = dict(YearlyGoal.CATEGORY_CHOICES)
     all_display_items = [
         {
@@ -1598,6 +2228,7 @@ def template_detail(request, slug):
         "template": template,
         "display_items": page_obj.object_list,
         "page_obj": page_obj,
+        "usage_label": template["usage_label"],
     })
 
 
@@ -1614,6 +2245,7 @@ def use_template(request, slug):
         list_title=template["title"],
         target_count=template["target_count"],
         is_public=False,
+        template_slug=template["slug"],
     )
     for title, category in template["items"]:
         YearlyGoal.objects.create(
@@ -1622,6 +2254,7 @@ def use_template(request, slug):
             title=title,
             category=category,
             item_is_public=True,
+            added_by=request.user,
         )
     messages.success(request, "テンプレートからマイリストを作成しました。")
     return redirect("goals:my_list_detail", pk=plan.pk)
@@ -1636,6 +2269,8 @@ def request_together(request, pk):
         item_is_public=True,
         year_plan__is_public=True,
     )
+    if not can_view_yearly_goal(request.user, goal):
+        raise PermissionDenied
     if goal.user == request.user:
         messages.info(request, "自分の項目にはリクエストできません。")
     else:
@@ -1685,6 +2320,8 @@ def together_requests_page(request):
 @login_required
 def add_list_comment(request, pk):
     plan = get_object_or_404(YearPlan, pk=pk, is_public=True)
+    if not can_view_list(request.user, plan):
+        raise PermissionDenied
     form = ListCommentForm(request.POST)
     if form.is_valid():
         comment = form.save(commit=False)
@@ -1713,6 +2350,8 @@ def add_public_goal_to_idea(request, pk):
         item_is_public=True,
         year_plan__is_public=True,
     )
+    if not can_view_yearly_goal(request.user, goal):
+        raise PermissionDenied
     note_lines = []
     note_lines.append(f"カテゴリ: {goal.get_category_display()}")
     if goal.description:
@@ -1733,6 +2372,68 @@ def add_public_goal_to_idea(request, pk):
     IdeaMemo.objects.create(user=request.user, title=goal.title, note=note)
     messages.success(request, "みんなのリストから思いつきメモに追加しました。")
     return redirect(request.META.get("HTTP_REFERER") or reverse("goals:public_goal_list"))
+
+
+@require_POST
+@login_required
+def add_goal_link(request, pk):
+    goal = get_object_or_404(YearlyGoal.objects.select_related("year_plan"), pk=pk)
+    if not can_edit_yearly_goal(request.user, goal):
+        raise PermissionDenied
+    form = GoalLinkForm(request.POST)
+    if form.is_valid():
+        link = form.save(commit=False)
+        link.goal = goal
+        link.save()
+        touch_year_plan(goal.year_plan)
+    return redirect("goals:yearly_goal_edit", pk=goal.pk)
+
+
+@require_POST
+@login_required
+def delete_goal_link(request, pk):
+    link = get_object_or_404(GoalLink.objects.select_related("goal", "goal__year_plan"), pk=pk)
+    if not can_edit_yearly_goal(request.user, link.goal):
+        raise PermissionDenied
+    goal = link.goal
+    link.delete()
+    touch_year_plan(goal.year_plan)
+    return redirect("goals:yearly_goal_edit", pk=goal.pk)
+
+
+@require_POST
+@login_required
+def add_goal_image(request, pk):
+    goal = get_object_or_404(YearlyGoal.objects.select_related("year_plan"), pk=pk)
+    if not can_edit_yearly_goal(request.user, goal):
+        raise PermissionDenied
+    form = GoalImageForm(request.POST, request.FILES)
+    if form.is_valid():
+        image = form.save(commit=False)
+        image.goal = goal
+        image.save()
+        touch_year_plan(goal.year_plan)
+    else:
+        for errors in form.errors.values():
+            for error in errors:
+                messages.error(request, error)
+    return redirect("goals:yearly_goal_edit", pk=goal.pk)
+
+
+@require_POST
+@login_required
+def delete_goal_image(request, pk):
+    image = get_object_or_404(GoalImage.objects.select_related("goal", "goal__year_plan"), pk=pk)
+    if not can_edit_yearly_goal(request.user, image.goal):
+        raise PermissionDenied
+    goal = image.goal
+    image_name = image.image.name if image.image else ""
+    image_storage = image.image.storage if image.image else None
+    image_pk = image.pk
+    image.delete()
+    delete_media_file_if_unreferenced(image_name, image_storage, goal_image_pk=image_pk)
+    touch_year_plan(goal.year_plan)
+    return redirect("goals:yearly_goal_edit", pk=goal.pk)
 
 
 def toggle_done(request, model_name, pk):
@@ -1760,8 +2461,6 @@ def toggle_done(request, model_name, pk):
             item.completed_date = None
         item.save(update_fields=["is_done", "completed_date", "updated_at"])
         touch_year_plan(item.year_plan)
-        if item.is_done and not was_done:
-            messages.success(request, "達成おめでとう！")
         return redirect(request.META.get("HTTP_REFERER") or reverse("goals:yearly_goal_list"))
 
     was_done = item.is_done
@@ -1773,8 +2472,6 @@ def toggle_done(request, model_name, pk):
     item.save(update_fields=update_fields)
     if model_name == "yearly":
         touch_year_plan(item.year_plan)
-    if item.is_done and not was_done:
-        messages.success(request, "達成おめでとう！")
     return redirect(request.META.get("HTTP_REFERER") or reverse("goals:home"))
 
 
@@ -1787,12 +2484,20 @@ class YearlyGoalCreateView(LoginRequiredMixin, CreateView):
     def get_year_plan(self):
         plan_pk = self.request.GET.get("list") or self.request.POST.get("list")
         if plan_pk:
-            return get_object_or_404(YearPlan, pk=plan_pk, user=self.request.user)
+            plan = get_object_or_404(YearPlan, pk=plan_pk)
+            if not can_edit_year_plan_items(self.request.user, plan):
+                raise PermissionDenied
+            return plan
         return get_default_year_plan(self.request.user)
 
     def form_valid(self, form):
-        form.instance.user = self.request.user
-        form.instance.year_plan = self.get_year_plan()
+        year_plan = self.get_year_plan()
+        if year_plan_item_limit_reached(year_plan):
+            form.add_error(None, item_limit_message())
+            return self.form_invalid(form)
+        form.instance.user = year_plan.user
+        form.instance.year_plan = year_plan
+        form.instance.added_by = self.request.user
         response = super().form_valid(form)
         touch_year_plan(form.instance.year_plan)
         return response
@@ -1810,7 +2515,7 @@ class YearlyGoalCreateView(LoginRequiredMixin, CreateView):
 
 class YearlyGoalUpdateView(LoginRequiredMixin, UpdateView):
     model = YearlyGoal
-    form_class = YearlyGoalForm
+    form_class = YearlyGoalCreateForm
     template_name = "goals/form.html"
     extra_context = {
         "title": "マイリスト項目を編集",
@@ -1819,11 +2524,12 @@ class YearlyGoalUpdateView(LoginRequiredMixin, UpdateView):
     }
 
     def get_queryset(self):
-        return YearlyGoal.objects.filter(user=self.request.user)
+        return YearlyGoal.objects.select_related("year_plan").filter(
+            Q(year_plan__user=self.request.user)
+            | Q(year_plan__collaborators=self.request.user, added_by=self.request.user)
+        ).distinct()
 
     def form_valid(self, form):
-        if not form.cleaned_data.get("is_done"):
-            form.instance.completed_date = None
         response = super().form_valid(form)
         touch_year_plan(form.instance.year_plan)
         return response
@@ -1834,7 +2540,8 @@ class YearlyGoalUpdateView(LoginRequiredMixin, UpdateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         if self.object.year_plan_id:
-            context["cancel_url"] = reverse("goals:yearly_goal_detail", kwargs={"pk": self.object.pk})
+            context["cancel_url"] = reverse("goals:my_list_detail", kwargs={"pk": self.object.year_plan_id})
+            context["form_back_label"] = "← リスト詳細へ戻る"
         return context
 
 

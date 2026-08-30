@@ -1,0 +1,49 @@
+{% extends "goals/management/base.html" %}
+
+{% block title %}テンプレート管理 - Wishly Management{% endblock %}
+
+{% block content %}
+<header class="management-page-header">
+    <div>
+        <h1>テンプレート</h1>
+        <p>公式テンプレートの利用回数を確認します。</p>
+    </div>
+</header>
+
+<form class="management-filter" method="get">
+    <select name="sort">
+        <option value="usage_desc"{% if sort == "usage_desc" %} selected{% endif %}>利用回数の多い順</option>
+        <option value="usage_asc"{% if sort == "usage_asc" %} selected{% endif %}>利用回数の少ない順</option>
+    </select>
+    <button class="management-button" type="submit">並び替え</button>
+</form>
+
+<section class="management-card">
+    <table class="management-table">
+        <thead>
+            <tr>
+                <th>テンプレート名</th>
+                <th>カテゴリ</th>
+                <th>項目数</th>
+                <th>利用回数</th>
+                <th>作成日時</th>
+                <th>公開状態</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for template in templates %}
+                <tr>
+                    <td>{{ template.title }}</td>
+                    <td>{{ template.category_label }}</td>
+                    <td>{{ template.item_count }}</td>
+                    <td>{{ template.usage_label }}</td>
+                    <td class="management-muted">静的初期データ</td>
+                    <td><span class="badge public">公開</span></td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="6" class="management-muted">テンプレートがありません。</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

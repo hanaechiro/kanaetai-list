@@ -1,64 +1,98 @@
 {% extends "goals/base.html" %}
 
-{% block title %}{{ setting.list_title|default:"マイリスト" }} - 叶えたいことリスト{% endblock %}
+{% block title %}{{ setting.list_title|default:"Wishly" }} - Wishly{% endblock %}
 
 {% block content %}
 {% include "goals/partials/list_detail_notebook_styles.html" %}
 
-<div class="detail-top-nav">
-    <a class="back-link" href="{% url 'goals:yearly_goal_list' %}">← マイリスト</a>
-</div>
+<style>
+    .public-detail-stack {
+        display: grid;
+        gap: 12px;
+    }
+    .detail-top-nav {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .detail-top-nav .detail-actions {
+        margin-left: auto;
+    }
+    .public-list-section {
+        margin-top: 0;
+    }
+    @media (max-width: 768px) {
+        .detail-top-nav {
+            align-items: flex-start;
+        }
+        .detail-top-nav .detail-actions {
+            justify-content: flex-end;
+        }
+    }
+</style>
 
-<div class="page-title list-title-row">
-    <div>
-        <h2>{{ setting.list_title|default:"マイリスト" }}</h2>
-        <p class="meta">最終更新日：{{ setting.updated_at|date:"Y/m/d H:i" }}</p>
+<div class="public-detail-stack">
+    <div class="detail-top-nav">
+        <a class="back-link app-back-link" href="{% url 'goals:my_profile' %}#profile-my-lists">&#8592; &#12510;&#12452;&#12522;&#12473;&#12488;&#12408;&#25147;&#12427;</a>
+        {% if can_manage_list %}
+            <div class="detail-actions list-detail-owner-actions">
+                <a class="button pill-button secondary-button danger settings-button" href="{% url 'goals:my_list_delete' setting.pk %}">&#21066;&#38500;</a>
+                <a class="button pill-button primary-button settings-button" href="{% url 'goals:my_list_edit' setting.pk %}">&#32232;&#38598;</a>
+            </div>
+        {% endif %}
     </div>
-    <div class="detail-actions">
-        <a class="button pill-button settings-button" href="{% url 'goals:my_list_edit' setting.pk %}">編集</a>
-        <a class="button pill-button settings-button danger" href="{% url 'goals:my_list_delete' setting.pk %}">削除</a>
-    </div>
-</div>
 
-<section class="progress-summary detail-summary">
-    <p class="meta">達成 {{ done_count }}件 / 登録 {{ total_count }}件 / 目標 {{ setting.target_count }}件 / あと {{ remaining_count }}件</p>
-    <div class="progress-track">
-        <div class="progress-bar" style="width: {{ setting.progress_percent }}%;"></div>
-    </div>
-    <div class="progress-summary-row detail-summary-row">
-        <span class="status-pill">達成率 {{ setting.progress_percent }}%</span>
-        <span class="status-pill">目標 {{ setting.target_count }}件</span>
-        <span class="status-pill {% if not setting.is_public %}private{% endif %}">
-            このリストは{% if setting.is_public %}公開{% else %}非公開{% endif %}
-        </span>
-    </div>
-</section>
+    {% include "goals/partials/list_detail_overview_card.html" %}
 
-<section class="yearly-notebook book">
-    <header class="notebook-header">
-        <h3>リスト一覧</h3>
-        <div class="notebook-header-actions">
-            <a class="button small-button pill-button" href="{% url 'goals:yearly_goal_add' %}?list={{ setting.pk }}">追加</a>
+    {% include "goals/partials/list_detail_members_card.html" %}
+
+    <section class="detail-card list-panel public-list-section">
+        <header class="list-panel-header">
+            <h3>&#12522;&#12473;&#12488;&#19968;&#35239;</h3>
+            <div class="notebook-header-actions">
+                {% if can_edit_items and not target_limit_reached %}
+                    <a class="button small-button pill-button" href="{% url 'goals:yearly_goal_add' %}?list={{ setting.pk }}">&#65291;&#38917;&#30446;&#12434;&#36861;&#21152;</a>
+                {% elif can_edit_items %}
+                    <span class="button small-button pill-button disabled-button" aria-disabled="true">&#30446;&#27161;&#20214;&#25968;&#12395;&#21040;&#36948;</span>
+                {% endif %}
+            </div>
+        </header>
+        <div class="goal-list-shell">
+            {% for goal in goals %}
+                {% include "goals/partials/yearly_notebook_goal.html" with goal=goal can_delete_goal=can_manage_list %}
+            {% empty %}
+                <p class="notice empty-list-note">&#38917;&#30446;&#12399;&#12414;&#12384;&#12354;&#12426;&#12414;&#12379;&#12435;&#12290;</p>
+            {% endfor %}
         </div>
-    </header>
+    </section>
 
-    {% include "goals/partials/list_detail_notebook_pages.html" with row_template="goals/partials/yearly_notebook_goal.html" %}
-
-</section>
-
-{% if total_pages > 1 %}
-    <nav class="app-pagination">
-        {% if previous_page %}
-            <a class="button small-button pill-button" href="?page={{ previous_page }}">前へ</a>
-        {% endif %}
-        <span>{{ current_page }} / {{ total_pages }} ページ</span>
-        {% if next_page %}
-            <a class="button small-button pill-button" href="?page={{ next_page }}">次へ</a>
-        {% endif %}
-    </nav>
-{% endif %}
+    {% if total_pages > 1 %}
+        <nav class="app-pagination pagination">
+            {% if previous_page %}
+                <a class="button small-button pill-button" href="?page={{ previous_page }}">&#21069;&#12408;</a>
+            {% endif %}
+            <span>{{ current_page }} / {{ total_pages }} &#12506;&#12540;&#12472;</span>
+            {% if next_page %}
+                <a class="button small-button pill-button" href="?page={{ next_page }}">&#27425;&#12408;</a>
+            {% endif %}
+        </nav>
+    {% endif %}
+</div>
 
 <script>
+    const detailScrollKey = "wishly-my-list-scroll-{{ setting.pk }}";
+    const savedScrollY = sessionStorage.getItem(detailScrollKey);
+    if (savedScrollY !== null) {
+        requestAnimationFrame(() => {
+            window.scrollTo(0, Number(savedScrollY) || 0);
+            sessionStorage.removeItem(detailScrollKey);
+        });
+    }
+
+    function rememberDetailScroll() {
+        sessionStorage.setItem(detailScrollKey, String(window.scrollY || 0));
+    }
+
     function bindGoalRow(row) {
         const checkbox = row.querySelector(".goal-check");
         const editor = row.querySelector(".completion-editor");
@@ -68,17 +102,91 @@
         }
         row.dataset.bound = "true";
 
+        const cancelButton = row.querySelector("[data-cancel-completion]");
+
         checkbox.addEventListener("change", () => {
             if (checkbox.checked && !row.classList.contains("done")) {
-                editor.style.display = "inline-flex";
-                editor.querySelector("input").focus();
+                const input = editor.querySelector("input");
+                if (input && !input.value) {
+                    const today = new Date();
+                    today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
+                    input.value = today.toISOString().slice(0, 10);
+                }
+                editor.classList.add("is-open");
+                if (input) input.focus();
                 return;
             }
+            rememberDetailScroll();
             form.submit();
         });
 
+        if (cancelButton) {
+            cancelButton.addEventListener("click", () => {
+                checkbox.checked = false;
+                editor.classList.remove("is-open");
+            });
+        }
+
+        form.addEventListener("submit", rememberDetailScroll);
     }
 
     document.querySelectorAll(".notebook-goal-row").forEach(bindGoalRow);
+
+    function bindSwipeDelete(shell) {
+        const row = shell.querySelector(".notebook-goal-row");
+        const form = shell.querySelector("[data-swipe-delete-form]");
+        if (!row || !form || shell.dataset.swipeBound === "true") {
+            return;
+        }
+        shell.dataset.swipeBound = "true";
+
+        let startX = 0;
+        let startY = 0;
+        let tracking = false;
+
+        shell.addEventListener("touchstart", (event) => {
+            if (event.touches.length !== 1) return;
+            startX = event.touches[0].clientX;
+            startY = event.touches[0].clientY;
+            tracking = true;
+        }, { passive: true });
+
+        shell.addEventListener("touchmove", (event) => {
+            if (!tracking || event.touches.length !== 1) return;
+            const diffX = event.touches[0].clientX - startX;
+            const diffY = event.touches[0].clientY - startY;
+            if (Math.abs(diffY) > Math.abs(diffX) || Math.abs(diffY) > 28) {
+                tracking = false;
+                return;
+            }
+            if (diffX < -42) {
+                document.querySelectorAll("[data-swipe-delete-shell].is-swiped").forEach((openShell) => {
+                    if (openShell !== shell) openShell.classList.remove("is-swiped");
+                });
+                shell.classList.add("is-swiped");
+                tracking = false;
+            } else if (diffX > 28) {
+                shell.classList.remove("is-swiped");
+                tracking = false;
+            }
+        }, { passive: true });
+
+        document.addEventListener("click", (event) => {
+            if (!shell.contains(event.target)) {
+                shell.classList.remove("is-swiped");
+            }
+        });
+
+        form.addEventListener("submit", (event) => {
+            if (!window.confirm("この項目を削除しますか？")) {
+                event.preventDefault();
+                shell.classList.remove("is-swiped");
+            } else {
+                rememberDetailScroll();
+            }
+        });
+    }
+
+    document.querySelectorAll("[data-swipe-delete-shell]").forEach(bindSwipeDelete);
 </script>
 {% endblock %}

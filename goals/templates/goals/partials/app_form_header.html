@@ -1,0 +1,25 @@
+<div class="app-form-header">
+    <div class="app-form-header-main">
+        {% if back_url %}
+            <a class="app-back-link" href="{{ back_url }}">{{ back_label|default:"戻る" }}</a>
+        {% endif %}
+        <h2>{{ header_title }}</h2>
+        {% if header_description %}
+            <p class="app-form-header-description">{{ header_description }}</p>
+        {% endif %}
+    </div>
+    <div class="app-form-header-actions">
+        {% if cancel_url %}
+            <a class="button pill-button secondary-button" href="{{ cancel_url }}">キャンセル</a>
+        {% endif %}
+        {% if save_form_id %}
+            <button class="button pill-button primary-button" type="submit" form="{{ save_form_id }}">保存</button>
+        {% endif %}
+        {% if primary_action_url %}
+            <a class="button pill-button primary-button" href="{{ primary_action_url }}">{{ primary_action_label }}</a>
+        {% endif %}
+        {% if delete_url %}
+            <a class="button pill-button secondary-button danger" href="{{ delete_url }}">削除</a>
+        {% endif %}
+    </div>
+</div>

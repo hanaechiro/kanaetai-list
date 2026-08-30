@@ -1,0 +1,24 @@
+{% extends "goals/base.html" %}
+
+{% block title %}メールアドレス変更 - Wishly{% endblock %}
+
+{% block content %}
+{% url 'goals:account_settings' as account_settings_url %}
+{% include "goals/partials/app_form_header.html" with header_title="メールアドレス変更" back_url=account_settings_url back_label="← アカウント設定へ戻る" cancel_url=account_settings_url save_form_id="email-change-form" %}
+
+<form id="email-change-form" class="form-box" method="post" novalidate>
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+        <p class="form-error-alert">{{ form.non_field_errors|striptags }}</p>
+    {% endif %}
+    {% for field in form.visible_fields %}
+        <div class="form-field{% if field.errors %} has-error{% endif %}">
+            {{ field.label_tag }}
+            {{ field }}
+            {% for error in field.errors %}
+                <p class="field-error-bubble">{{ error }}</p>
+            {% endfor %}
+        </div>
+    {% endfor %}
+</form>
+{% endblock %}

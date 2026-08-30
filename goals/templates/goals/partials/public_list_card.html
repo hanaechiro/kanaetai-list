@@ -1,55 +1,54 @@
-<article class="yearly-notebook book">
-    <header class="notebook-header">
+<article class="list-card discover-card">
+    <div class="list-card-top">
         <div>
+            <p class="discover-user">{{ group.display_name }}さん</p>
             <h3>
-                <a class="notebook-goal-title" href="{% url 'goals:public_list_detail' group.plan.pk %}">{{ group.list_title }}</a>
+                <a class="discover-title-link" href="{% url 'goals:public_list_detail' group.plan.pk %}">{{ group.list_title }}</a>
             </h3>
-            <p class="meta">{{ group.display_name }}さん</p>
         </div>
-    </header>
+    </div>
 
-    <section class="progress-summary detail-summary" style="margin: 14px 18px;">
-        <p class="meta">達成 {{ group.done_count }}件 / 登録 {{ group.total_count }}件 / 目標 {{ group.target_count }}件 / あと {{ group.remaining_count }}件</p>
+    <div class="discover-progress">
+        <p class="meta-text discover-progress-meta">
+            <span>目標 {{ group.target_count }}件</span>
+        </p>
         <div class="progress-track">
             <div class="progress-bar" style="width: {{ group.progress_percent }}%;"></div>
+            <span class="progress-label">{{ group.progress_percent }}%</span>
         </div>
-        <div class="progress-summary-row detail-summary-row">
-            <span class="status-pill">達成率 {{ group.progress_percent }}%</span>
-            <span class="status-pill">♡ {{ group.like_count }}</span>
-            <span class="status-pill">保存 {{ group.save_count }}</span>
-            {% if group.show_item_privacy and not group.plan.is_public %}
-                <span class="status-pill private">リスト非公開</span>
-            {% endif %}
+    </div>
+
+    {% if group.can_react or not user.is_authenticated %}
+        <div class="social-action-row">
+            <form class="social-action-form" method="post" action="{% url 'goals:toggle_like_list' group.plan.pk %}">
+                {% csrf_token %}
+                <button class="social-icon-button like-button {% if group.is_liked %}is-active{% endif %}" type="submit" aria-label="いいね">
+                    <span class="heart-icon">{% if group.is_liked %}♥{% else %}♡{% endif %}</span>
+                    <span class="social-count">{{ group.like_count }}</span>
+                </button>
+            </form>
+            <button
+                class="social-icon-button share-list-button"
+                type="button"
+                data-copy-list-url="{% url 'goals:public_list_detail' group.plan.pk %}"
+                data-share-count-url="{% url 'goals:record_list_share' group.plan.pk %}"
+                aria-label="共有"
+            >
+                <svg class="share-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M4 12.5 20 4l-4.2 16-3.6-6.1L4 12.5Z"></path>
+                </svg>
+                <span class="social-count" data-share-count>{{ group.share_count|default:0 }}</span>
+                <span class="sr-only" data-copy-label>リンクをコピー</span>
+            </button>
+            <form class="social-action-form" method="post" action="{% url 'goals:toggle_saved_list' group.plan.pk %}">
+                {% csrf_token %}
+                <button class="social-icon-button bookmark-button {% if group.is_saved %}is-active{% endif %}" type="submit" aria-label="保存">
+                    <svg class="bookmark-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M6 4.75C6 3.78 6.78 3 7.75 3h8.5c.97 0 1.75.78 1.75 1.75v15.1L12 16.2l-6 3.65V4.75Z"></path>
+                    </svg>
+                    <span class="social-count sr-only">{{ group.save_count }}</span>
+                </button>
+            </form>
         </div>
-        {% if group.can_react %}
-            <div class="detail-reaction-row">
-                <form method="post" action="{% url 'goals:toggle_like_list' group.plan.pk %}">
-                    {% csrf_token %}
-                    <button class="button small-button pill-button" type="submit">
-                        {% if group.is_liked %}♡ 済み{% else %}♡{% endif %}
-                    </button>
-                </form>
-                <form method="post" action="{% url 'goals:toggle_saved_list' group.plan.pk %}">
-                    {% csrf_token %}
-                    <button class="button small-button pill-button" type="submit">
-                        {% if group.is_saved %}保存済み{% else %}保存{% endif %}
-                    </button>
-                </form>
-            </div>
-        {% endif %}
-    </section>
-
-    {% include "goals/partials/list_detail_notebook_pages.html" with left_goals=group.left_goals right_goals=group.right_goals row_template="goals/partials/public_list_goal_row.html" hide_item_actions=hide_item_actions %}
-
-    {% if group.list_total_pages > 1 %}
-        <nav class="app-pagination" style="margin: 14px 18px 18px;">
-            {% if group.list_previous_query %}
-                <a class="button small-button pill-button" href="?{{ group.list_previous_query }}">前へ</a>
-            {% endif %}
-            <span>{{ group.list_current_page }} / {{ group.list_total_pages }} ページ</span>
-            {% if group.list_next_query %}
-                <a class="button small-button pill-button" href="?{{ group.list_next_query }}">次へ</a>
-            {% endif %}
-        </nav>
     {% endif %}
 </article>

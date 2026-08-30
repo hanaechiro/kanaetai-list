@@ -1,0 +1,32 @@
+{
+  "name": "Wishly",
+  "short_name": "Wishly",
+  "description": "叶えたいことを集めて、他の人のリストから刺激をもらえるアプリ",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#37352f",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/static/goals/icons/wishly-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/goals/icons/wishly-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/goals/icons/wishly-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["lifestyle", "productivity", "social"]
+}

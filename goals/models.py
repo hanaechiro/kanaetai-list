@@ -34,9 +34,20 @@ class YearPlan(models.Model):
         related_name="year_plans",
     )
     year = models.PositiveIntegerField("Year")
-    list_title = models.CharField("リスト名", max_length=120, blank=True)
+    list_title = models.CharField("リスト名", max_length=30, blank=True)
+    description = models.TextField("説明", max_length=50, blank=True)
+    icon = models.CharField("アイコン", max_length=20, blank=True, default="checklist")
     target_count = models.PositiveIntegerField("Target count", choices=TARGET_CHOICES, default=100)
     is_public = models.BooleanField("この年のリストを公開する", default=False)
+    is_collaborative = models.BooleanField("共同リスト", default=False)
+    template_slug = models.SlugField("Template slug", max_length=80, blank=True, db_index=True)
+    collaborators = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="collaborating_year_plans",
+    )
+    share_count = models.PositiveIntegerField("Share count", default=0)
+    created_at = models.DateTimeField("Created at", auto_now_add=True, blank=True, null=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -48,9 +59,12 @@ class YearPlan(models.Model):
 
 class Profile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    display_name = models.CharField("表示名", max_length=80, blank=True)
-    bio = models.TextField("自己紹介", blank=True)
+    display_name = models.CharField("表示名", max_length=15)
+    bio = models.TextField("自己紹介", max_length=150, blank=True)
     icon = models.ImageField("プロフィールアイコン", upload_to="profile_icons/", blank=True, null=True)
+
+    email_verified = models.BooleanField("Email verified", default=False)
+    is_private = models.BooleanField("鍵アカウント", default=True)
 
     def __str__(self):
         return self.display_name or self.user.username
@@ -59,7 +73,7 @@ class Profile(models.Model):
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def create_or_update_profile(sender, instance, created, **kwargs):
     if created:
-        Profile.objects.create(user=instance, display_name=instance.username)
+        Profile.objects.create(user=instance, display_name=instance.username, is_private=True)
     else:
         Profile.objects.get_or_create(user=instance)
 
@@ -94,12 +108,27 @@ class YearlyGoal(models.Model):
     )
     title = models.CharField("やりたいこと", max_length=200)
     description = models.TextField("メモ", blank=True)
+    completed_note = models.TextField("達成後の記録", blank=True)
     category = models.CharField("カテゴリ", max_length=20, choices=CATEGORY_CHOICES, default="other")
     planned_date = models.DateField("予定日", blank=True, null=True)
     completed_date = models.DateField("完了日", blank=True, null=True)
     is_done = models.BooleanField("達成済み", default=False)
     is_public = models.BooleanField("公開する", default=False)
     item_is_public = models.BooleanField("この項目を公開する", default=True)
+    added_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="added_yearly_goals",
+    )
+    completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="completed_yearly_goals",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -108,6 +137,42 @@ class YearlyGoal(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class GoalLink(models.Model):
+    goal = models.ForeignKey(
+        YearlyGoal,
+        verbose_name="やりたいこと",
+        on_delete=models.CASCADE,
+        related_name="links",
+    )
+    title = models.CharField("リンクタイトル", max_length=120, blank=True)
+    url = models.URLField("URL")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.title or self.url
+
+
+class GoalImage(models.Model):
+    goal = models.ForeignKey(
+        YearlyGoal,
+        verbose_name="やりたいこと",
+        on_delete=models.CASCADE,
+        related_name="images",
+    )
+    image = models.ImageField("画像", upload_to="goal_images/")
+    caption = models.CharField("キャプション", max_length=120, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.caption or f"{self.goal}の画像"
 
 
 class MonthlyGoal(models.Model):
@@ -343,6 +408,87 @@ class Follow(models.Model):
         return f"{self.follower} follows {self.following}"
 
 
+class FollowRequest(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_ACCEPTED = "accepted"
+    STATUS_REJECTED = "rejected"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "申請中"),
+        (STATUS_ACCEPTED, "承認済み"),
+        (STATUS_REJECTED, "却下"),
+    ]
+
+    requester = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="sent_follow_requests",
+    )
+    target = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="received_follow_requests",
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["requester", "target"], name="unique_follow_request_per_user"),
+            models.CheckConstraint(
+                condition=~models.Q(requester=models.F("target")),
+                name="prevent_self_follow_request",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.requester} -> {self.target} ({self.status})"
+
+
+class CollaborationInvite(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_ACCEPTED = "accepted"
+    STATUS_DECLINED = "declined"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "申請中"),
+        (STATUS_ACCEPTED, "参加済み"),
+        (STATUS_DECLINED, "拒否"),
+    ]
+
+    list = models.ForeignKey(
+        YearPlan,
+        on_delete=models.CASCADE,
+        related_name="collaboration_invites",
+    )
+    inviter = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="sent_collaboration_invites",
+    )
+    invitee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="received_collaboration_invites",
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["list", "invitee"], name="unique_collaboration_invite_per_list"),
+            models.CheckConstraint(
+                condition=~models.Q(inviter=models.F("invitee")),
+                name="prevent_self_collaboration_invite",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.inviter} -> {self.invitee} ({self.list})"
+
+
 class TogetherRequest(models.Model):
     STATUS_PENDING = "pending"
     STATUS_ACCEPTED = "accepted"
@@ -405,3 +551,24 @@ class ListComment(models.Model):
 
     def __str__(self):
         return f"{self.user}: {self.body[:20]}"
+
+
+class UserActivity(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="wishly_activity",
+    )
+    date = models.DateField(db_index=True)
+    first_seen_at = models.DateTimeField()
+    last_seen_at = models.DateTimeField()
+    request_count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["-date", "-last_seen_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["user", "date"], name="unique_user_activity_per_day"),
+        ]
+
+    def __str__(self):
+        return f"{self.user} on {self.date}"

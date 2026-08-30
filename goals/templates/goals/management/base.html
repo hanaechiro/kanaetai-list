@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Wishly Management{% endblock %}</title>
+    <style>
+        :root {
+            --mgmt-bg: #f6f7f8;
+            --mgmt-surface: #fff;
+            --mgmt-text: #202124;
+            --mgmt-muted: #6f747b;
+            --mgmt-border: #e1e4e8;
+            --mgmt-strong: #111;
+            --mgmt-danger: #b42318;
+            --mgmt-radius: 10px;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            background: var(--mgmt-bg);
+            color: var(--mgmt-text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", sans-serif;
+            font-size: 14px;
+            line-height: 1.55;
+        }
+        a { color: inherit; }
+        .management-shell {
+            min-height: 100vh;
+            display: grid;
+            grid-template-columns: 240px minmax(0, 1fr);
+        }
+        .management-sidebar {
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            padding: 24px 18px;
+            border-right: 1px solid var(--mgmt-border);
+            background: var(--mgmt-surface);
+        }
+        .management-brand {
+            display: grid;
+            gap: 4px;
+            margin-bottom: 28px;
+        }
+        .management-brand strong {
+            font-size: 20px;
+            letter-spacing: 0;
+        }
+        .management-brand span {
+            color: var(--mgmt-muted);
+            font-size: 12px;
+        }
+        .management-nav {
+            display: grid;
+            gap: 6px;
+        }
+        .management-nav a {
+            display: block;
+            padding: 10px 12px;
+            border-radius: 8px;
+            color: var(--mgmt-muted);
+            font-weight: 650;
+            text-decoration: none;
+        }
+        .management-nav a.is-active,
+        .management-nav a:hover {
+            background: #111;
+            color: #fff;
+        }
+        .management-main {
+            min-width: 0;
+            padding: 28px 32px 48px;
+        }
+        .management-page-header {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 22px;
+        }
+        .management-page-header h1 {
+            margin: 0;
+            font-size: 28px;
+            line-height: 1.2;
+            letter-spacing: 0;
+        }
+        .management-page-header p {
+            margin: 8px 0 0;
+            color: var(--mgmt-muted);
+        }
+        .management-card {
+            border: 1px solid var(--mgmt-border);
+            border-radius: var(--mgmt-radius);
+            background: var(--mgmt-surface);
+            box-shadow: 0 1px 2px rgba(20, 20, 20, 0.03);
+        }
+        .management-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 16px 18px;
+            border-bottom: 1px solid var(--mgmt-border);
+        }
+        .management-card-header h2,
+        .management-card-header h3 {
+            margin: 0;
+            font-size: 17px;
+            line-height: 1.35;
+        }
+        .management-grid {
+            display: grid;
+            gap: 14px;
+        }
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 12px;
+        }
+        .kpi-card {
+            padding: 16px;
+        }
+        .kpi-card span {
+            display: block;
+            color: var(--mgmt-muted);
+            font-size: 12px;
+            font-weight: 650;
+        }
+        .kpi-card strong {
+            display: block;
+            margin-top: 8px;
+            font-size: 28px;
+            line-height: 1;
+        }
+        .kpi-card p {
+            margin: 8px 0 0;
+            color: var(--mgmt-muted);
+            font-size: 12px;
+        }
+        .management-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .management-table th,
+        .management-table td {
+            padding: 11px 12px;
+            border-bottom: 1px solid var(--mgmt-border);
+            text-align: left;
+            vertical-align: middle;
+        }
+        .management-table th {
+            color: var(--mgmt-muted);
+            font-size: 12px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .management-table tr:last-child td {
+            border-bottom: 0;
+        }
+        .management-table a {
+            font-weight: 650;
+            text-decoration: none;
+        }
+        .management-muted {
+            color: var(--mgmt-muted);
+        }
+        .management-danger {
+            color: var(--mgmt-danger);
+        }
+        .management-filter {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+        .management-filter input,
+        .management-filter select {
+            min-height: 38px;
+            padding: 0 12px;
+            border: 1px solid var(--mgmt-border);
+            border-radius: 8px;
+            background: #fff;
+            font: inherit;
+        }
+        .management-button {
+            min-height: 38px;
+            padding: 0 14px;
+            border: 1px solid #111;
+            border-radius: 8px;
+            background: #111;
+            color: #fff;
+            font: inherit;
+            font-weight: 650;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .management-button.secondary {
+            border-color: var(--mgmt-border);
+            background: #fff;
+            color: var(--mgmt-text);
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 24px;
+            padding: 0 8px;
+            border: 1px solid var(--mgmt-border);
+            border-radius: 999px;
+            background: #f9fafb;
+            color: var(--mgmt-muted);
+            font-size: 12px;
+            font-weight: 650;
+            white-space: nowrap;
+        }
+        .badge.public { background: #ecfdf3; color: #027a48; border-color: #abefc6; }
+        .badge.private { background: #fff7ed; color: #b54708; border-color: #fed7aa; }
+        .pagination {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 14px;
+        }
+        .pagination a,
+        .pagination span {
+            min-height: 34px;
+            padding: 6px 10px;
+            border: 1px solid var(--mgmt-border);
+            border-radius: 8px;
+            background: #fff;
+            text-decoration: none;
+        }
+        @media (max-width: 1100px) {
+            .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        }
+        @media (max-width: 860px) {
+            .management-shell { grid-template-columns: 1fr; }
+            .management-sidebar {
+                position: static;
+                height: auto;
+                border-right: 0;
+                border-bottom: 1px solid var(--mgmt-border);
+            }
+            .management-nav { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+            .management-main { padding: 20px 16px 36px; }
+            .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <div class="management-shell">
+        <aside class="management-sidebar">
+            <div class="management-brand">
+                <strong>Wishly</strong>
+                <span>Management</span>
+            </div>
+            <nav class="management-nav" aria-label="管理メニュー">
+                <a class="{% if active_management_nav == 'dashboard' %}is-active{% endif %}" href="{% url 'goals:management_dashboard' %}">ダッシュボード</a>
+                <a class="{% if active_management_nav == 'users' %}is-active{% endif %}" href="{% url 'goals:management_users' %}">ユーザー</a>
+                <a class="{% if active_management_nav == 'lists' %}is-active{% endif %}" href="{% url 'goals:management_lists' %}">リスト</a>
+                <a class="{% if active_management_nav == 'templates' %}is-active{% endif %}" href="{% url 'goals:management_templates' %}">テンプレート</a>
+            </nav>
+        </aside>
+        <main class="management-main">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</body>
+</html>

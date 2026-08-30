@@ -10,60 +10,37 @@
             </a>
             <div>
                 <p class="discover-user">{{ group.display_name }}さん</p>
-                <h3>
-                    <a class="discover-title-link" href="{% url 'goals:public_list_detail' group.plan.pk %}">{{ group.list_title }}</a>
-                </h3>
+                <h3><a class="discover-title-link" href="{% url 'goals:public_list_detail' group.plan.pk %}">{{ group.list_title }}</a></h3>
             </div>
         </div>
     </div>
 
     <div class="discover-progress">
         <p class="meta-text discover-progress-meta">
-            <span>達成率 {{ group.progress_percent }}%</span>
-            <span>・</span>
             <span>目標 {{ group.target_count }}件</span>
         </p>
-        <div class="progress-track">
-            <div class="progress-bar" style="width: {{ group.progress_percent }}%;"></div>
-        </div>
+        <div class="progress-track"><div class="progress-bar" style="width: {{ group.progress_percent }}%;"></div><span class="progress-label">{{ group.progress_percent }}%</span></div>
     </div>
 
-    <dl class="discover-stats">
-        <div>
-            <dt>いいね</dt>
-            <dd>{{ group.like_count }}</dd>
-        </div>
-        <div>
-            <dt>保存</dt>
-            <dd>{{ group.save_count }}</dd>
-        </div>
-    </dl>
-
-    {% if group.can_react %}
-        <div class="discover-actions">
-            <form method="post" action="{% url 'goals:toggle_like_list' group.plan.pk %}">
-                {% csrf_token %}
-                <button class="button small-button pill-button" type="submit">
-                    {% if group.is_liked %}♡ 済み{% else %}♡{% endif %}
-                </button>
-            </form>
-            <form method="post" action="{% url 'goals:toggle_saved_list' group.plan.pk %}">
-                {% csrf_token %}
-                <button class="button small-button pill-button" type="submit">
-                    {% if group.is_saved %}保存済み{% else %}保存{% endif %}
-                </button>
-            </form>
-        </div>
-    {% elif not user.is_authenticated %}
-        <div class="discover-actions">
-            <form method="post" action="{% url 'goals:toggle_like_list' group.plan.pk %}">
-                {% csrf_token %}
-                <button class="button small-button pill-button" type="submit">♡</button>
-            </form>
-            <form method="post" action="{% url 'goals:toggle_saved_list' group.plan.pk %}">
-                {% csrf_token %}
-                <button class="button small-button pill-button" type="submit">保存</button>
-            </form>
-        </div>
-    {% endif %}
+    <div class="social-action-row">
+        <form class="social-action-form" method="post" action="{% url 'goals:toggle_like_list' group.plan.pk %}">
+            {% csrf_token %}
+            <button class="social-icon-button like-button {% if group.is_liked %}is-active{% endif %}" type="submit" aria-label="いいね">
+                <span class="heart-icon">{% if group.is_liked %}&#9829;{% else %}&#9825;{% endif %}</span>
+                <span class="social-count">{{ group.like_count }}</span>
+            </button>
+        </form>
+        <button class="social-icon-button share-list-button" type="button" data-copy-list-url="{% url 'goals:public_list_detail' group.plan.pk %}" data-share-count-url="{% url 'goals:record_list_share' group.plan.pk %}" aria-label="共有">
+            <svg class="share-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12.5 20 4l-4.2 16-3.6-6.1L4 12.5Z"></path></svg>
+            <span class="social-count" data-share-count>{{ group.share_count|default:0 }}</span>
+            <span class="sr-only" data-copy-label>リンクをコピー</span>
+        </button>
+        <form class="social-action-form" method="post" action="{% url 'goals:toggle_saved_list' group.plan.pk %}">
+            {% csrf_token %}
+            <button class="social-icon-button bookmark-button {% if group.is_saved %}is-active{% endif %}" type="submit" aria-label="保存">
+                <svg class="bookmark-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 4.75C6 3.78 6.78 3 7.75 3h8.5c.97 0 1.75.78 1.75 1.75v15.1L12 16.2l-6 3.65V4.75Z"></path></svg>
+                <span class="social-count">{{ group.save_count|default:0 }}</span>
+            </button>
+        </form>
+    </div>
 </article>

@@ -1,0 +1,126 @@
+{% extends "goals/base.html" %}
+
+{% block title %}運営ダッシュボード - Wishly{% endblock %}
+
+{% block content %}
+<style>
+  .staff-dashboard {
+    display: grid;
+    gap: 20px;
+  }
+
+  .staff-dashboard__header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    border-bottom: 1px solid #e5e5e5;
+    padding-bottom: 16px;
+  }
+
+  .staff-dashboard__title {
+    margin: 0;
+    color: #37352f;
+    font-size: clamp(24px, 5vw, 34px);
+    line-height: 1.2;
+  }
+
+  .staff-dashboard__lead,
+  .staff-dashboard__date,
+  .staff-metric-card__help {
+    color: #787774;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .staff-dashboard__lead {
+    margin: 8px 0 0;
+  }
+
+  .staff-dashboard__date {
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  .staff-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 12px;
+  }
+
+  .staff-metric-card {
+    min-width: 0;
+    border: 1px solid #e5e5e5;
+    border-radius: 14px;
+    background: #fff;
+    padding: 16px;
+  }
+
+  .staff-metric-card__label {
+    display: block;
+    color: #787774;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .staff-metric-card__value {
+    display: block;
+    margin-top: 8px;
+    color: #37352f;
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0;
+  }
+
+  .staff-metric-card__help {
+    margin: 10px 0 0;
+    font-size: 12px;
+  }
+
+  @media (max-width: 768px) {
+    .staff-dashboard__header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .staff-dashboard__date {
+      white-space: normal;
+    }
+
+    .staff-metric-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .staff-metric-card {
+      padding: 14px;
+    }
+
+    .staff-metric-card__value {
+      font-size: 28px;
+    }
+  }
+</style>
+
+<div class="staff-dashboard">
+  <header class="staff-dashboard__header">
+    <div>
+      <h1 class="staff-dashboard__title">運営ダッシュボード</h1>
+      <p class="staff-dashboard__lead">Wishlyの利用状況を確認できます。</p>
+    </div>
+    <p class="staff-dashboard__date">集計日：{{ today|date:"Y/m/d" }}</p>
+  </header>
+
+  <section class="staff-metric-grid" aria-label="利用状況">
+    {% for metric in metrics %}
+      <article class="staff-metric-card">
+        <span class="staff-metric-card__label">{{ metric.label }}</span>
+        <strong class="staff-metric-card__value">{{ metric.value }}</strong>
+        {% if metric.help %}
+          <p class="staff-metric-card__help">{{ metric.help }}</p>
+        {% endif %}
+      </article>
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends "goals/management/base.html" %}
+
+{% block title %}リスト管理 - Wishly Management{% endblock %}
+
+{% block content %}
+<header class="management-page-header">
+    <div>
+        <h1>リスト</h1>
+        <p>公開・非公開を問わず、運営上必要なメタ情報のみ確認します。</p>
+    </div>
+</header>
+
+<form class="management-filter" method="get">
+    <input type="search" name="q" value="{{ query }}" placeholder="リストタイトル・作成者">
+    <select name="visibility">
+        <option value="all"{% if visibility == "all" %} selected{% endif %}>すべて</option>
+        <option value="public"{% if visibility == "public" %} selected{% endif %}>公開</option>
+        <option value="private"{% if visibility == "private" %} selected{% endif %}>非公開</option>
+    </select>
+    <button class="management-button" type="submit">検索</button>
+    <a class="management-button secondary" href="{% url 'goals:management_lists' %}">クリア</a>
+</form>
+
+<section class="management-card">
+    <table class="management-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>タイトル</th>
+                <th>作成者</th>
+                <th>カテゴリ</th>
+                <th>公開状態</th>
+                <th>作成日時</th>
+                <th>項目</th>
+                <th>達成</th>
+                <th>いいね</th>
+                <th>保存</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for list in page_obj %}
+                <tr>
+                    <td>{{ list.id }}</td>
+                    <td>{{ list.list_title|default:"無題のリスト" }}</td>
+                    <td>{{ list.user.username }}</td>
+                    <td class="management-muted">リストカテゴリなし</td>
+                    <td>{% if list.is_public %}<span class="badge public">公開</span>{% else %}<span class="badge private">非公開</span>{% endif %}</td>
+                    <td>{% if list.created_at %}{{ list.created_at|date:"Y/m/d H:i" }}{% else %}<span class="management-muted">記録なし</span>{% endif %}</td>
+                    <td>{{ list.item_count }}</td>
+                    <td>{{ list.done_count }}</td>
+                    <td>{{ list.like_count }}</td>
+                    <td>{{ list.save_count }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="10" class="management-muted">リストが見つかりません。</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+{% include "goals/management/pagination.html" %}
+{% endblock %}

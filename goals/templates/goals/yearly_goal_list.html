@@ -1,122 +1,98 @@
 {% extends "goals/base.html" %}
 
-{% block title %}マイリスト一覧 - 叶えたいことリスト{% endblock %}
+{% block title %}タイムライン - Wishly{% endblock %}
 
 {% block content %}
 <style>
-    .my-list-title-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 18px;
-    }
-    .my-list-title-row h2 {
-        margin: 0;
-        font-size: 26px;
-    }
-    .my-list-search {
-        display: grid;
-        gap: 8px;
-        margin-bottom: 18px;
-        padding: 12px;
-    }
-    .my-list-search-row {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        gap: 8px;
-        align-items: center;
-    }
-    .my-list-search-row label {
-        display: block;
-        margin-bottom: 4px;
-        color: #7a6750;
-        font-size: 12px;
-        font-weight: 700;
-    }
-    .my-list-search-actions {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        justify-content: flex-end;
-        align-self: end;
-        text-align: right;
-    }
-    @media (max-width: 768px) {
-        .my-list-title-row {
-            flex-direction: row;
-            align-items: center;
-        }
-        .my-list-title-row h2 {
-            font-size: 22px;
-        }
-        .my-list-title-row .button {
-            flex: 0 0 auto;
-            width: auto;
-        }
+    .timeline-page { display: grid; gap: 16px; padding-bottom: calc(128px + env(safe-area-inset-bottom)); }
+    .timeline-head { display: grid; gap: 8px; padding-bottom: 2px; }
+    .timeline-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .timeline-head h2 { margin: 0; color: var(--app-text, #37352f); font-size: clamp(30px, 8vw, 40px); line-height: 1.1; letter-spacing: 0; }
+    .timeline-head p { margin: -5px 0 0; color: var(--app-muted, #787774); font-size: 14px; line-height: 1.7; }
+    .timeline-notification-link { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 42px; height: 42px; border: 1px solid var(--app-border, #e5e5e5); border-radius: 50%; color: var(--app-text, #37352f); background: #fff; text-decoration: none; }
+    .timeline-notification-link svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+    .timeline-list { display: grid; gap: 16px; }
+    .timeline-card { display: grid; gap: 13px; border: 1px solid var(--app-border, #e5e5e5); border-radius: 26px; background: #fff; padding: 18px; box-shadow: 0 8px 28px rgba(15, 15, 15, 0.045); }
+    .timeline-user-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; }
+    .timeline-avatar { width: 46px; height: 46px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid var(--app-border, #e5e5e5); border-radius: 50%; background: #f7f7f5; color: var(--app-text, #37352f); font-size: 16px; font-weight: 850; text-decoration: none; }
+    .timeline-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .timeline-user-name-line { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; min-width: 0; }
+    .timeline-user-name { margin: 0; color: var(--app-text, #37352f); font-size: 15px; font-weight: 850; line-height: 1.3; }
+    .timeline-time { margin: 0; color: var(--app-muted, #787774); font-size: 12px; line-height: 1.3; }
+    .timeline-badge { display: inline-flex; width: fit-content; align-items: center; min-height: 26px; margin-top: 7px; border-radius: 999px; background: #f1f1ef; color: var(--app-text, #37352f); padding: 0 10px; font-size: 12px; font-weight: 850; }
+    .timeline-badge.is-achievement { background: #edf7ee; color: #2f6b3f; }
+    .timeline-badge.is-share { background: #edf3fb; color: #2e5f91; }
+    .timeline-action { margin: 0; color: var(--app-text, #37352f); font-size: 16px; font-weight: 500; line-height: 1.55; }
+    .timeline-preview { display: grid; gap: 7px; border: 1px solid var(--app-border, #e5e5e5); border-radius: 20px; background: var(--app-subtle-bg, #f7f7f5); padding: 11px 12px; color: inherit; text-decoration: none; }
+    .timeline-preview:hover, .timeline-preview:focus { text-decoration: none; border-color: #d6d6d6; }
+    .timeline-list-title { margin: 0 0 2px; color: var(--app-text, #37352f); font-size: 17px; font-weight: 900; line-height: 1.35; }
+    .timeline-list-description { margin: 0; color: var(--app-muted, #787774); font-size: 13px; line-height: 1.55; }
+    .timeline-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 2px; color: var(--app-muted, #787774); font-size: 12px; font-weight: 750; }
+    .timeline-progress { height: 16px; }
+    .timeline-empty { display: grid; gap: 12px; justify-items: start; border: 1px solid var(--app-border, #e5e5e5); border-radius: 24px; background: #fff; padding: 24px; }
+    .timeline-empty h3 { margin: 0; color: var(--app-text, #37352f); font-size: 18px; }
+    .timeline-empty p { margin: 0; color: var(--app-muted, #787774); font-size: 14px; line-height: 1.7; }
+    @media (max-width: 760px) {
+        .timeline-page { gap: 16px; }
+        .timeline-card { border-radius: 24px; padding: 16px; }
+        .timeline-preview { border-radius: 18px; padding: 11px 12px; }
     }
 </style>
 
-<div class="my-list-title-row">
-    <h2>マイリスト</h2>
-    <a class="button pill-button" href="{% url 'goals:my_list_add' %}">＋新規作成</a>
-</div>
-
-<section class="panel my-list-search">
-    <form method="get" class="my-list-search-row">
-        <div>
-            <label for="q">キーワード</label>
-            <input id="q" type="text" name="q" value="{{ query }}" placeholder="リスト名・項目名">
+<div class="timeline-page">
+    <header class="timeline-head">
+        <div class="timeline-title-row">
+            <h2>タイムライン</h2>
+            <a class="timeline-notification-link" href="{% url 'goals:notifications' %}" aria-label="通知">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M13.7 21a2 2 0 0 1-3.4 0"></path></svg>
+            </a>
         </div>
-        <div class="my-list-search-actions">
-            <a class="clear-search-link" href="{% url 'goals:yearly_goal_list' %}">条件をクリア</a>
-            <button class="button pill-button" type="submit">検索</button>
-        </div>
-    </form>
-</section>
+        <p>フォロー中の人の活動</p>
+    </header>
 
-<section class="discover-grid">
-    {% for plan in plans %}
-        <article class="list-card discover-card my-list-card">
-            <div class="list-card-top">
-                <div class="discover-card-head">
-                    <div>
-                        <p class="discover-user">マイリスト</p>
-                        <h3>
-                            <a class="discover-title-link" href="{% url 'goals:my_list_detail' plan.pk %}">{{ plan.list_title|default:"マイリスト" }}</a>
-                        </h3>
+    {% if timeline_groups %}
+        <section class="timeline-list" aria-label="フォロー中の活動">
+            {% for group in timeline_groups %}
+                <article class="timeline-card">
+                    <div class="timeline-user-row">
+                        <a class="timeline-avatar" href="{% url 'goals:profile_detail' group.user.username %}" aria-label="{{ group.display_name }}さんのプロフィール">
+                            {% if group.user.profile.icon %}<img src="{{ group.user.profile.icon.url }}" alt="">{% else %}{{ group.display_name|slice:":1" }}{% endif %}
+                        </a>
+                        <div>
+                            <div class="timeline-user-name-line">
+                                <p class="timeline-user-name">{{ group.display_name }}</p>
+                                <p class="timeline-time">・{{ group.plan.updated_at|timesince }}前</p>
+                            </div>
+                            <span class="timeline-badge {% if group.timeline_type == 'achievement' %}is-achievement{% elif group.timeline_type == 'share' %}is-share{% endif %}">{{ group.timeline_badge }}</span>
+                        </div>
                     </div>
-                </div>
-                <span class="visibility-badge {% if not plan.is_public %}private{% endif %}">
-                    {% if plan.is_public %}公開{% else %}非公開{% endif %}
-                </span>
-            </div>
 
-            <div class="discover-progress">
-                <p class="meta-text discover-progress-meta">
-                    <span>達成率 {{ plan.progress_percent }}%</span>
-                    <span>・</span>
-                    <span>目標 {{ plan.target_count }}件</span>
-                </p>
-                <div class="progress-track">
-                    <div class="progress-bar" style="width: {{ plan.progress_percent }}%;"></div>
-                </div>
-            </div>
-        </article>
-    {% empty %}
-        <p class="notice">マイリストはまだありません。</p>
-    {% endfor %}
-</section>
+                    <p class="timeline-action">{{ group.timeline_action }}</p>
 
-{% if page_obj.paginator.num_pages > 1 %}
-    <nav class="app-pagination pagination">
-        {% if page_obj.has_previous %}
-            <a class="button small-button pill-button" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.previous_page_number }}">前へ</a>
-        {% endif %}
-        <span>{{ page_obj.number }} / {{ page_obj.paginator.num_pages }} ページ</span>
-        {% if page_obj.has_next %}
-            <a class="button small-button pill-button" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.next_page_number }}">次へ</a>
-        {% endif %}
-    </nav>
-{% endif %}
+                    <a class="timeline-preview" href="{% url 'goals:public_list_detail' group.plan.pk %}">
+                        <h3 class="timeline-list-title">{{ group.list_title }}</h3>
+                        {% if group.plan.description %}<p class="timeline-list-description">{{ group.plan.description|truncatechars:72 }}</p>{% endif %}
+                        <p class="timeline-meta"><span>目標 {{ group.target_count }}件</span></p>
+                        <span class="timeline-progress progress-track"><span class="progress-bar" style="width: {{ group.progress_percent }}%;"></span><span class="progress-label">{{ group.progress_percent }}%</span></span>
+                    </a>
+
+                </article>
+            {% endfor %}
+        </section>
+    {% else %}
+        <section class="timeline-empty">
+            <h3>まだタイムラインに表示できる更新がありません。</h3>
+            <p>発見から気になるユーザーをフォローしてみましょう。</p>
+            <a class="button pill-button primary-button" href="{% url 'goals:public_goal_list' %}">発見へ移動</a>
+        </section>
+    {% endif %}
+
+    {% if page_obj.paginator.num_pages > 1 %}
+        <nav class="app-pagination pagination">
+            {% if page_obj.has_previous %}<a class="button small-button pill-button" href="?{% if timeline_filter != 'all' %}type={{ timeline_filter }}&{% endif %}page={{ page_obj.previous_page_number }}">前へ</a>{% endif %}
+            <span>{{ page_obj.number }} / {{ page_obj.paginator.num_pages }} ページ</span>
+            {% if page_obj.has_next %}<a class="button small-button pill-button" href="?{% if timeline_filter != 'all' %}type={{ timeline_filter }}&{% endif %}page={{ page_obj.next_page_number }}">次へ</a>{% endif %}
+        </nav>
+    {% endif %}
+</div>
 {% endblock %}

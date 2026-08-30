@@ -1,0 +1,391 @@
+﻿{% extends "goals/base.html" %}
+
+{% block title %}{{ title }} - Wishly{% endblock %}
+
+{% block content %}
+<style>
+    .note-edit-page {
+        display: grid;
+        gap: 14px;
+        padding-bottom: calc(128px + env(safe-area-inset-bottom));
+    }
+    #main-form {
+        display: grid;
+        gap: 14px;
+        min-width: 0;
+    }
+    .note-edit-title-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 12px;
+    }
+    .note-edit-title-row > div:first-child {
+        display: flex;
+        align-items: center;
+        min-height: 40px;
+    }
+    .note-edit-actions {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        white-space: nowrap;
+    }
+    .note-field {
+        display: grid;
+        gap: 6px;
+        min-width: 0;
+    }
+    .note-field label,
+    .note-setting-label {
+        color: var(--app-muted, #787774);
+        font-size: 12px;
+        font-weight: 800;
+    }
+    .note-field input,
+    .note-field textarea,
+    .note-field select {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+    .note-title-input {
+        margin-top: 4px;
+        margin-bottom: 2px;
+    }
+    .note-title-input input {
+        min-height: 42px;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 12px;
+        background: #fff;
+        padding: 9px 12px;
+        font-family: var(--ui-font-family, inherit);
+        color: var(--app-text, #37352f);
+        font-size: var(--ui-list-title-size, 17px);
+        font-weight: var(--ui-list-title-weight, 680);
+        line-height: var(--ui-list-title-line-height, 1.42);
+        letter-spacing: 0;
+    }
+    .note-card {
+        display: grid;
+        gap: 0;
+        position: relative;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 16px;
+        background: #fff;
+        box-shadow: var(--app-shadow, 0 1px 2px rgba(15, 15, 15, 0.03));
+        overflow: hidden;
+    }
+    .note-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 14px 8px;
+        border-bottom: 1px solid var(--app-border, #e5e5e5);
+    }
+    .note-card-header h3 {
+        margin: 0;
+        color: var(--app-text, #37352f);
+        font-size: 15px;
+    }
+    .note-insert-panel {
+        display: none;
+        position: absolute;
+        top: 102px;
+        right: 12px;
+        z-index: 5;
+        width: min(340px, calc(100% - 24px));
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 14px;
+        background: #fff;
+        padding: 12px;
+        box-shadow: 0 16px 40px rgba(15, 15, 15, 0.14);
+    }
+    .note-insert-panel.is-open {
+        display: block;
+    }
+    .note-popover-form {
+        display: grid;
+        gap: 10px;
+    }
+    .note-popover-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        color: var(--app-text, #37352f);
+        font-size: 13px;
+        font-weight: 800;
+    }
+    .note-panel-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--app-muted, #787774);
+        cursor: pointer;
+        line-height: 1;
+    }
+    .note-panel-close:hover,
+    .note-panel-close:focus {
+        background: #f7f7f5;
+        color: var(--app-text, #37352f);
+    }
+    .note-popover-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+    }
+    .note-popover-form input[type="file"] {
+        min-height: 44px;
+        padding: 10px;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 10px;
+        background: #fff;
+    }
+    .note-canvas {
+        display: grid;
+        gap: 10px;
+        padding: 14px;
+        background: #fff;
+    }
+    .note-canvas textarea,
+    .note-textarea {
+        min-height: 180px;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 12px;
+        background: #fff;
+        padding: 11px 12px;
+        resize: vertical;
+        color: var(--app-text, #37352f);
+        font-size: 15px;
+        line-height: 1.7;
+        white-space: pre-wrap;
+    }
+    .note-textarea:focus {
+        outline: none;
+        box-shadow: none;
+    }
+    .note-block {
+        min-width: 0;
+    }
+    .note-text-block {
+        margin: 0;
+        color: var(--app-text, #37352f);
+        line-height: 1.8;
+        overflow-wrap: anywhere;
+    }
+    .note-image-block {
+        display: grid;
+        gap: 8px;
+        max-width: 560px;
+    }
+    .note-image-frame {
+        position: relative;
+    }
+    .note-image-block img {
+        display: block;
+        width: 100%;
+        max-height: 420px;
+        object-fit: contain;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 12px;
+        background: #f7f7f5;
+    }
+    .note-delete-inline {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+    }
+    .note-link-block {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 12px;
+        background: #f7f7f5;
+        padding: 10px 12px;
+    }
+    .note-link-content {
+        display: grid;
+        gap: 3px;
+        min-width: 0;
+    }
+    .note-link-content a {
+        color: var(--app-text, #37352f);
+        font-weight: 700;
+        overflow-wrap: anywhere;
+    }
+    .note-link-content span {
+        color: var(--app-muted, #787774);
+        font-size: 12px;
+        overflow-wrap: anywhere;
+    }
+    .note-settings {
+        display: grid;
+        gap: 10px;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 16px;
+        background: #fff;
+        padding: 20px 16px;
+    }
+    .note-settings-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+    .note-settings select,
+    .note-settings input[type="date"] {
+        min-height: 42px;
+    }
+    .hidden-completion-date {
+        display: none;
+    }
+    @media (max-width: 768px) {
+        .note-edit-title-row {
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 8px;
+        }
+        .note-edit-actions {
+            gap: 6px;
+        }
+        .note-edit-actions .button {
+            padding-inline: 12px;
+        }
+        .note-card-header {
+            align-items: flex-start;
+            flex-direction: column;
+            gap: 4px;
+        }
+    </style>
+
+<div class="note-edit-page">
+    {% include "goals/partials/app_form_header.html" with header_title=title back_url=cancel_url back_label="← 詳細へ戻る" cancel_url=cancel_url save_form_id="main-form" %}
+
+    <form id="main-form" method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        {% if form.errors %}
+            <div class="form-error-alert" role="alert">
+                <strong>入力内容を確認してください。</strong>
+                {% if form.non_field_errors %}
+                    <ul>
+                        {% for error in form.non_field_errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+        {% endif %}
+
+        <div class="note-field note-title-input{% if form.title.errors %} has-error{% endif %}">
+            <label for="{{ form.title.id_for_label }}">タイトル：</label>
+            {{ form.title }}
+            {% for error in form.title.errors %}
+                <p class="field-error-bubble">{{ error }}</p>
+            {% endfor %}
+        </div>
+
+        <section class="note-card" aria-label="メモ">
+            <div class="note-card-header">
+                <h3>メモ</h3>
+            </div>
+
+
+<div class="note-canvas">
+                <div class="note-field{% if form.description.errors %} has-error{% endif %}">
+                    <label class="sr-only" for="{{ form.description.id_for_label }}">ノート本文</label>
+                    {{ form.description }}
+                    {% for error in form.description.errors %}
+                        <p class="field-error-bubble">{{ error }}</p>
+                    {% endfor %}
+                </div>
+
+                {% for block in note_blocks %}
+                    {% if block.type == "image" or block.type == "link" %}
+                        {# Link and image editing is currently hidden. #}
+                    {% elif block.type == "text" and block.text != object.description %}
+                        <p class="note-block note-text-block">{{ block.text }}</p>
+                    {% endif %}
+                {% endfor %}
+            </div>
+
+            <textarea name="{{ form.completed_note.html_name }}" hidden>{{ form.completed_note.value|default_if_none:"" }}</textarea>
+        </section>
+
+        <section class="note-settings" aria-label="設定">
+            <span class="note-setting-label">設定</span>
+            <div class="note-settings-grid">
+                <div class="note-field{% if form.category.errors %} has-error{% endif %}">
+                    {{ form.category.label_tag }}
+                    {{ form.category }}
+                    {% for error in form.category.errors %}
+                        <p class="field-error-bubble">{{ error }}</p>
+                    {% endfor %}
+                </div>
+
+                <div class="note-field{% if form.is_done.errors %} has-error{% endif %}">
+                    {{ form.is_done.label_tag }}
+                    {{ form.is_done }}
+                    {% for error in form.is_done.errors %}
+                        <p class="field-error-bubble">{{ error }}</p>
+                    {% endfor %}
+                </div>
+
+                <div class="note-field{% if form.completed_date.errors %} has-error{% endif %}">
+                    {{ form.completed_date.label_tag }}
+                    {{ form.completed_date }}
+                    {% for error in form.completed_date.errors %}
+                        <p class="field-error-bubble">{{ error }}</p>
+                    {% endfor %}
+                </div>
+
+                <div class="note-field{% if form.item_is_public.errors %} has-error{% endif %}">
+                    <label class="checkbox-label" for="{{ form.item_is_public.id_for_label }}">
+                        {{ form.item_is_public }}
+                        <span>{{ form.item_is_public.label }}</span>
+                    </label>
+                    {% for error in form.item_is_public.errors %}
+                        <p class="field-error-bubble">{{ error }}</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+    </form>
+</div>
+
+<script>
+    const doneControl = document.getElementById("id_is_done");
+    const completedDateInput = document.getElementById("id_completed_date");
+
+    if (doneControl && completedDateInput) {
+        const completedDateRow = completedDateInput.closest(".note-field");
+        const today = () => {
+            const date = new Date();
+            date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+            return date.toISOString().slice(0, 10);
+        };
+        const toggleCompletedDate = () => {
+            const isCompleted = doneControl.type === "checkbox"
+                ? doneControl.checked
+                : ["1", "true", "True"].includes(doneControl.value);
+
+            if (isCompleted) {
+                if (!completedDateInput.value) completedDateInput.value = today();
+                completedDateRow?.classList.remove("hidden-completion-date");
+            } else {
+                completedDateInput.value = "";
+                completedDateRow?.classList.add("hidden-completion-date");
+            }
+        };
+
+        doneControl.addEventListener("change", toggleCompletedDate);
+        toggleCompletedDate();
+    }
+</script>
+{% endblock %}

@@ -1,413 +1,352 @@
 {% extends "goals/base.html" %}
 
-{% block title %}{% if is_own_profile %}マイページ{% else %}プロフィール{% endif %} - 叶えたいことリスト{% endblock %}
+{% block title %}{% if is_own_profile %}マイページ{% else %}プロフィール{% endif %} - Wishly{% endblock %}
 
 {% block content %}
 <style>
-    .profile-page {
+    .profile-page { position: relative; display: grid; gap: 22px; padding-bottom: calc(120px + env(safe-area-inset-bottom)); }
+    .profile-page-menu { position: absolute; top: 14px; right: 14px; z-index: 20; }
+    .profile-page-menu summary { list-style: none; }
+    .profile-page-menu summary::-webkit-details-marker { display: none; }
+    .menu-trigger {
         position: relative;
-        display: grid;
-        gap: 22px;
-    }
-    .profile-page-menu {
-        position: absolute;
-        top: 14px;
-        right: 14px;
-        z-index: 5;
-    }
-    .profile-card {
-        position: relative;
-        border: 1px solid #ddcbb0;
-        border-radius: 20px;
-        background:
-            radial-gradient(circle at 20% 12%, rgba(255, 255, 255, 0.7), transparent 28%),
-            linear-gradient(135deg, rgba(136, 104, 65, 0.08), transparent 38%),
-            #fff6e6;
-        padding: 16px;
-        box-shadow:
-            0 18px 42px rgba(76, 57, 33, 0.13),
-            inset 0 0 0 1px rgba(255, 255, 255, 0.55);
-    }
-    .profile-top {
-        display: grid;
-        grid-template-columns: auto minmax(0, 1fr);
-        gap: 18px;
-        align-items: center;
-    }
-    .profile-main-avatar {
-        width: 88px;
-        height: 88px;
-        border: 4px solid #fffaf1;
-        box-shadow: 0 8px 18px rgba(83, 62, 36, 0.13);
-    }
-    .profile-side {
-        display: grid;
-        gap: 12px;
-        min-width: 0;
-        padding-right: 42px;
-    }
-    .profile-name {
-        margin: 0;
-        color: #3d3021;
-        font-size: 22px;
-        line-height: 1.25;
-        overflow-wrap: anywhere;
-    }
-    .profile-stats {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 8px;
-        text-align: center;
-    }
-    .profile-stat-link,
-    .profile-stat {
-        display: grid;
-        gap: 3px;
-        color: #3d3021;
-        text-decoration: none;
-    }
-    .profile-stat-link:hover,
-    .profile-stat-link:focus,
-    .profile-stat-link:active {
-        text-decoration: none;
-    }
-    .profile-stat strong,
-    .profile-stat-link strong {
-        font-size: 20px;
-        line-height: 1;
-    }
-    .profile-stat span,
-    .profile-stat-link span {
-        color: #7a6750;
-        font-size: 12px;
-        font-weight: 700;
-        white-space: nowrap;
-    }
-    .profile-bio {
-        margin: 14px 0 0;
-        color: #5f4d38;
-        line-height: 1.65;
-    }
-    .profile-actions-row {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-        gap: 8px;
-        margin-top: 14px;
-        align-items: center;
-    }
-    .profile-actions-row form {
-        margin: 0;
-    }
-    .profile-actions-row .button {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        box-sizing: border-box;
-        width: 100%;
-        min-height: 38px;
-        padding: 8px 12px;
-        opacity: 1;
-        white-space: nowrap;
+        width: 38px;
+        height: 38px;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 50%;
+        background: #fff;
+        color: var(--app-text, #37352f);
+        font-size: 22px;
+        font-weight: 800;
+        line-height: 1;
+        cursor: pointer;
+        box-shadow: 0 4px 14px rgba(15, 15, 15, 0.06);
     }
-    .profile-section-heading {
-        display: flex;
-        align-items: end;
-        justify-content: space-between;
-        gap: 12px;
-    }
-    .profile-section-heading h3 {
-        margin: 0;
-        color: #3d3021;
-    }
-    .profile-section-heading p {
-        margin: 4px 0 0;
-        color: #7a6750;
-        font-size: 13px;
-    }
-    .profile-list-grid {
+    .profile-menu {
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
         display: grid;
-        gap: 16px;
-        margin-top: 14px;
+        width: min(260px, calc(100vw - 28px));
+        max-height: min(70vh, 520px);
+        overflow-y: auto;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: 0 14px 34px rgba(15, 15, 15, 0.14);
+        padding: 6px;
     }
-    .profile-list-tabs {
-        margin-top: 14px;
-    }
-    .account-panel {
+    .profile-menu-group {
         display: grid;
-        gap: 0;
-        border: 1px solid #eadfce;
-        border-radius: 16px;
-        background: #fffdf8;
-        overflow: hidden;
-        box-shadow: 0 8px 18px rgba(76, 57, 33, 0.06);
+        padding: 4px 0;
+        border-bottom: 1px solid var(--app-border, #e5e5e5);
     }
-    .account-panel h3 {
-        margin: 0;
-        padding: 14px 16px;
-        color: #3d3021;
-        font-size: 16px;
-        border-bottom: 1px solid #f0e8dc;
-        background: #fff8ec;
-    }
-    .account-row {
+    .profile-menu-group:last-child { border-bottom: 0; }
+    .profile-menu-group form { margin: 0; }
+    .profile-menu-item {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 12px;
         width: 100%;
+        min-height: 44px;
         box-sizing: border-box;
         border: 0;
+        border-radius: 6px;
         background: transparent;
-        color: #3d3021;
-        padding: 15px 16px;
+        color: var(--app-text, #37352f);
+        padding: 10px 12px;
         font: inherit;
-        font-weight: 700;
+        font-size: 14px;
+        font-weight: 650;
+        line-height: 1.35;
         text-align: left;
+        text-decoration: none;
         cursor: pointer;
     }
-    .account-row:hover,
-    .account-row:focus {
-        background: #fff8ec;
+    .profile-menu-item:hover,
+    .profile-menu-item:focus {
+        background: var(--app-subtle-bg, #f7f7f5);
+        text-decoration: none;
     }
-    .account-row::after {
-        content: ">";
-        color: #9a8466;
+    .profile-menu-arrow { color: var(--app-muted, #787774); }
+    .menu-label-with-badge { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+    .profile-card { position: relative; border: 1px solid var(--app-border, #e5e5e5); border-radius: 8px; background: #fff; padding: 18px; box-shadow: 0 8px 18px rgba(0,0,0,0.04); }
+    .profile-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: center; }
+    .profile-avatar-main { display: inline-flex; align-items: center; justify-content: center; width: 84px; height: 84px; border-radius: 50%; background: #f4f1ec; color: var(--app-text, #37352f); font-size: 30px; font-weight: 700; overflow: hidden; }
+    .profile-avatar-main img { width: 100%; height: 100%; object-fit: cover; }
+    .profile-main { display: grid; gap: 10px; min-width: 0; padding-right: 44px; }
+    .profile-name { display: inline-flex; align-items: center; gap: 6px; margin: 0; color: var(--app-text, #37352f); font-size: 22px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+    .profile-username { margin: -5px 0 0; color: var(--app-muted, #787774); font-size: 13px; font-weight: 650; line-height: 1.3; overflow-wrap: anywhere; }
+    .profile-name-lock { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; color: #6f6b66; flex: 0 0 auto; }
+    .profile-name-lock svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+    .profile-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; text-align: center; }
+    .profile-stat-link, .profile-stat { display: grid; gap: 3px; color: var(--app-text, #37352f); text-decoration: none; }
+    .profile-stat strong, .profile-stat-link strong { font-size: 18px; line-height: 1; font-weight: 700; }
+    .profile-stat span, .profile-stat-link span { color: var(--app-muted, #787774); font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .profile-bio { margin: 14px 0 0; color: var(--app-muted, #787774); line-height: 1.65; white-space: pre-wrap; }
+    .profile-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+    .profile-actions form { margin: 0; }
+    .profile-actions .button { width: 100%; justify-content: center; }
+    .profile-section-heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; }
+    .profile-section-heading h3 { margin: 0; color: var(--app-text, #37352f); font-size: 18px; font-weight: 700; }
+    .profile-section-heading p { margin: 5px 0 0; color: var(--app-muted, #787774); font-size: 13px; }
+    .profile-list-grid { display: grid; gap: 12px; margin-top: 12px; }
+    .profile-list-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; border: 1px solid var(--app-border, #e5e5e5); border-radius: 8px; background: #fff; padding: 14px 16px; color: inherit; text-decoration: none; }
+    .profile-list-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .profile-list-title-row h4 { margin: 0; font-size: 18px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+    .profile-list-badges { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+    .profile-list-badge { display: inline-flex; align-items: center; min-height: 22px; border: 1px solid var(--app-border, #e5e5e5); border-radius: 999px; padding: 0 8px; color: var(--app-muted, #787774); font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .profile-list-content { display: grid; gap: 8px; min-width: 0; }
+    .profile-list-content p { margin: 0; color: var(--app-muted, #787774); font-size: 13px; }
+    .profile-list-arrow::after { content: ">"; color: var(--app-muted, #787774); font-weight: 700; }
+    .private-profile-panel { border: 1px solid var(--app-border, #e5e5e5); border-radius: 8px; background: #fff; padding: 18px; }
+    .private-profile-panel h3 { margin: 0 0 8px; font-size: 17px; }
+    .private-profile-panel p { margin: 0; color: var(--app-muted, #787774); line-height: 1.6; }
+    .profile-share-toast {
+        position: fixed;
+        left: 50%;
+        bottom: calc(92px + env(safe-area-inset-bottom));
+        z-index: 80;
+        width: max-content;
+        max-width: calc(100vw - 20px);
+        border-radius: 999px;
+        background: rgba(25, 25, 25, 0.94);
+        color: #fff;
+        padding: 11px 16px;
+        font-size: 14px;
         font-weight: 700;
+        line-height: 1.4;
+        text-align: center;
+        white-space: nowrap;
+        box-shadow: 0 12px 28px rgba(15, 15, 15, 0.22);
+        opacity: 0;
+        pointer-events: none;
+        transform: translate(-50%, 12px);
+        transition: opacity 0.18s ease, transform 0.18s ease;
     }
-    @media (max-width: 768px) {
-        .profile-page {
-            gap: 18px;
-        }
-        .profile-card {
-            border-radius: 18px;
-            padding: 14px;
-        }
-        .profile-top {
-            gap: 14px;
-        }
-        .profile-main-avatar {
-            width: 82px;
-            height: 82px;
-        }
-        .profile-side {
-            gap: 10px;
-            padding-right: 38px;
-        }
-        .profile-name {
-            font-size: 20px;
-        }
-        .profile-stat strong,
-        .profile-stat-link strong {
-            font-size: 18px;
-        }
-        .profile-actions-row .button {
-            padding-inline: 10px;
-            font-size: 13px;
-        }
+    .profile-share-toast.is-visible {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+    @media (max-width: 430px) {
+        .profile-card { padding: 16px; }
+        .profile-page-menu { right: 10px; }
+        .profile-head { gap: 13px; }
+        .profile-avatar-main { width: 76px; height: 76px; font-size: 27px; }
+        .profile-name { font-size: 20px; }
+        .profile-username { font-size: 12px; }
+        .profile-actions { gap: 8px; }
+        .profile-actions .button { padding-inline: 10px; font-size: 13px; }
     }
 </style>
 
 <div class="profile-page">
-    <section class="profile-card">
-        {% if is_own_profile %}
-            <details class="menu-popover profile-page-menu" data-menu-popover>
-                <summary aria-label="その他メニュー">…</summary>
-                <div class="menu-popover-panel">
-                    <a class="menu-popover-link" href="{% url 'goals:saved_list_page' %}">保存したリスト</a>
-                    <a class="menu-popover-link" href="{% url 'goals:saved_item_page' %}">保存した項目</a>
-                    <a class="menu-popover-link" href="{% url 'goals:idea_memo_list' %}">思いつきメモ</a>
-                </div>
-            </details>
-        {% endif %}
-        <div class="profile-top">
-            <span class="avatar large profile-main-avatar">
-                {% if profile.icon %}
-                    <img src="{{ profile.icon.url }}" alt="">
-                {% else %}
-                    {{ profile.display_name|default:profile_user.username|slice:":1" }}
-                {% endif %}
-            </span>
-
-            <div class="profile-side">
-                <h2 class="profile-name">{{ profile.display_name|default:profile_user.username }}</h2>
-                <div class="profile-stats" aria-label="プロフィール統計">
-                    <a class="profile-stat-link" href="{% if is_own_profile %}{% url 'goals:yearly_goal_list' %}{% else %}#profile-public-lists{% endif %}">
-                        <strong>{{ profile_stats.list_count }}</strong>
-                        <span>リスト</span>
+    {% if is_own_profile %}
+        <details class="profile-page-menu">
+            <summary class="menu-trigger" aria-label="メニュー">
+                ...
+                {% if unread_notification_count %}<span class="notification-badge">{{ unread_notification_count|default:0 }}</span>{% endif %}
+            </summary>
+            <div class="profile-menu">
+                <div class="profile-menu-group">
+                    <a class="profile-menu-item" href="{% url 'goals:edit_profile' %}"><span>プロフィール編集</span><span class="profile-menu-arrow">&gt;</span></a>
+                    <button class="profile-menu-item" type="button" data-share-profile data-share-url="{{ profile_share_url }}"><span>プロフィールをシェア</span></button>
+                    <a class="profile-menu-item" href="{% url 'goals:notifications' %}">
+                        <span class="menu-label-with-badge"><span>通知</span>{% if unread_notification_count %}<span class="notification-badge">{{ unread_notification_count }}</span>{% endif %}</span>
+                        <span class="profile-menu-arrow">&gt;</span>
                     </a>
-                    {% if is_own_profile %}
-                        <a class="profile-stat-link" href="{% url 'goals:followers_page' %}">
-                            <strong>{{ profile_stats.followers_count }}</strong>
-                            <span>フォロワー</span>
-                        </a>
-                        <a class="profile-stat-link" href="{% url 'goals:following_users_page' %}">
-                            <strong>{{ profile_stats.following_count }}</strong>
-                            <span>フォロー</span>
-                        </a>
-                    {% else %}
-                        <span class="profile-stat">
-                            <strong>{{ profile_stats.followers_count }}</strong>
-                            <span>フォロワー</span>
-                        </span>
-                        <span class="profile-stat">
-                            <strong>{{ profile_stats.following_count }}</strong>
-                            <span>フォロー</span>
+                    <a class="profile-menu-item" href="{% url 'goals:account_settings' %}"><span>アカウント設定</span><span class="profile-menu-arrow">&gt;</span></a>
+                </div>
+                <div class="profile-menu-group">
+                    <a class="profile-menu-item" href="{% url 'goals:saved_list_page' %}"><span>保存したリスト</span><span class="profile-menu-arrow">&gt;</span></a>
+                    <a class="profile-menu-item" href="{% url 'goals:saved_item_page' %}"><span>保存した項目</span><span class="profile-menu-arrow">&gt;</span></a>
+                    <a class="profile-menu-item" href="{% url 'goals:idea_memo_list' %}"><span>思いつきメモ</span><span class="profile-menu-arrow">&gt;</span></a>
+                </div>
+                <div class="profile-menu-group">
+                    <form method="post" action="{% url 'logout' %}" data-logout-form>
+                        {% csrf_token %}
+                        <button class="profile-menu-item" type="submit"><span>ログアウト</span></button>
+                    </form>
+                </div>
+            </div>
+        </details>
+    {% endif %}
+
+    <section class="profile-card">
+        <div class="profile-head">
+            <span class="profile-avatar-main">
+                {% if profile.icon %}<img src="{{ profile.icon.url }}" alt="">{% else %}{{ profile.display_name|default:profile_user.username|slice:":1" }}{% endif %}
+            </span>
+            <div class="profile-main">
+                <h2 class="profile-name">
+                    {{ profile.display_name|default:profile_user.username }}
+                    {% if profile.is_private %}
+                        <span class="profile-name-lock" aria-label="非公開アカウント" title="非公開アカウント">
+                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>
                         </span>
                     {% endif %}
-                </div>
+                </h2>
+                <p class="profile-username">@{{ profile_user.username }}</p>
+                {% if can_view_profile_details %}
+                    <div class="profile-stats" aria-label="プロフィール統計">
+                        <a class="profile-stat-link" href="{% if is_own_profile %}#profile-my-lists{% else %}#profile-public-lists{% endif %}"><strong>{{ profile_stats.list_count }}</strong><span>リスト</span></a>
+                        {% if is_own_profile %}
+                            <a class="profile-stat-link" href="{% url 'goals:followers_page' %}"><strong>{{ profile_stats.followers_count }}</strong><span>フォロワー</span></a>
+                            <a class="profile-stat-link" href="{% url 'goals:following_users_page' %}"><strong>{{ profile_stats.following_count }}</strong><span>フォロー</span></a>
+                        {% else %}
+                            <span class="profile-stat"><strong>{{ profile_stats.followers_count }}</strong><span>フォロワー</span></span>
+                            <span class="profile-stat"><strong>{{ profile_stats.following_count }}</strong><span>フォロー</span></span>
+                        {% endif %}
+                    </div>
+                {% endif %}
             </div>
         </div>
 
-        {% if profile.bio %}
-            <p class="profile-bio">{{ profile.bio|linebreaksbr }}</p>
-        {% endif %}
+        {% if profile.bio %}<p class="profile-bio">{{ profile.bio|linebreaksbr }}</p>{% endif %}
 
-        <div class="profile-actions-row">
+        <div class="profile-actions {% if not is_own_profile %}is-other{% endif %}">
             {% if is_own_profile %}
-                <a class="button small-button pill-button" href="{% url 'goals:edit_profile' %}">プロフィールを編集</a>
+                <a class="button pill-button" href="{% url 'goals:edit_profile' %}">プロフィールを編集</a>
+                <button class="button pill-button secondary-button" type="button" data-share-profile data-share-url="{{ profile_share_url }}">シェア</button>
             {% else %}
                 <form method="post" action="{% url 'goals:toggle_follow' profile_user.username %}">
                     {% csrf_token %}
-                    <button class="button small-button pill-button" type="submit">{% if is_following %}フォロー中{% else %}フォロー{% endif %}</button>
+                    <button class="button pill-button primary-button" type="submit">{% if is_following %}フォロー中{% elif follow_request_status == "pending" %}申請中{% else %}{% if profile.is_private %}フォロー申請{% else %}フォロー{% endif %}{% endif %}</button>
                 </form>
+                <button class="button pill-button secondary-button" type="button" data-share-profile data-share-url="{{ profile_share_url }}">シェア</button>
             {% endif %}
-            <button
-                class="button small-button pill-button"
-                type="button"
-                data-share-profile
-                data-share-title="叶えたいことリスト"
-                data-share-text="{{ profile.display_name|default:profile_user.username }}さんの叶えたいことリスト"
-                data-share-url="{{ profile_share_url }}"
-            >プロフィールをシェア</button>
         </div>
     </section>
 
+    {% if follow_request_status == "pending" %}<p class="notice">フォロー申請中です。承認されると公開リストを見られます。</p>{% endif %}
+
     {% if is_own_profile %}
         <section id="profile-my-lists">
-            <div class="profile-section-heading">
-                <div>
-                    <h3>マイリスト</h3>
-                    <p>最近更新したリストを表示しています。</p>
-                </div>
-            </div>
-            <nav class="segment-tabs profile-list-tabs" aria-label="マイリスト絞り込み">
-                <a class="segment-tab {% if list_filter == 'all' %}is-active{% endif %}" href="{% url 'goals:my_profile' %}#profile-my-lists">すべて</a>
-                <a class="segment-tab {% if list_filter == 'active' %}is-active{% endif %}" href="?list_status=active#profile-my-lists">未完了</a>
-                <a class="segment-tab {% if list_filter == 'completed' %}is-active{% endif %}" href="?list_status=completed#profile-my-lists">完了済み</a>
-            </nav>
-            <div class="profile-list-grid discover-grid">
+            <div class="profile-section-heading"><div><h3>マイリスト</h3><p>最近更新したリストを表示しています。</p></div></div>
+            <div class="profile-list-grid">
                 {% for plan in my_plans %}
-                    <article class="list-card discover-card my-list-card">
-                        <div class="list-card-top">
-                            <div class="discover-card-head">
-                                <div>
-                                    <p class="discover-user">マイリスト</p>
-                                    <h3>
-                                        <a class="discover-title-link" href="{% url 'goals:my_list_detail' plan.pk %}">{{ plan.list_title|default:"マイリスト" }}</a>
-                                    </h3>
-                                </div>
+                    <a class="profile-list-card" href="{% url 'goals:my_list_detail' plan.pk %}">
+                        <div class="profile-list-content">
+                            <div class="profile-list-title-row">
+                                <h4>{{ plan.list_title|default:"マイリスト" }}</h4>
+                                <span class="profile-list-badges">
+                                    {% if not plan.is_public %}<span class="profile-list-badge">非公開</span>{% endif %}
+                                    {% if plan.is_target_completed %}<span class="profile-list-badge">達成済み</span>{% endif %}
+                                </span>
                             </div>
-                            <span class="visibility-badge {% if not plan.is_public %}private{% endif %}">
-                                {% if plan.is_public %}公開{% else %}非公開{% endif %}
-                            </span>
+                            <p>目標 {{ plan.target_count }}件</p>
+                            <span class="profile-list-progress progress-track"><span class="progress-bar" style="width: {{ plan.progress_percent }}%;"></span><span class="progress-label">{{ plan.progress_percent }}%</span></span>
                         </div>
-                        <div class="discover-progress">
-                            <p class="meta-text discover-progress-meta">
-                                <span>達成率 {{ plan.progress_percent }}%</span>
-                                <span>・</span>
-                                <span>目標 {{ plan.target_count }}件</span>
-                            </p>
-                            <div class="progress-track">
-                                <div class="progress-bar" style="width: {{ plan.progress_percent }}%;"></div>
-                            </div>
-                        </div>
-                    </article>
+                        <span class="profile-list-arrow" aria-hidden="true"></span>
+                    </a>
                 {% empty %}
                     <p class="notice">マイリストはまだありません。</p>
                 {% endfor %}
             </div>
             {% if my_list_page_obj and my_list_page_obj.paginator.num_pages > 1 %}
-                <nav class="app-pagination">
-                    {% if my_list_page_obj.has_previous %}
-                        <a class="button small-button pill-button" href="?{% if list_filter_query %}{{ list_filter_query }}&{% endif %}lists_page={{ my_list_page_obj.previous_page_number }}#profile-my-lists">前へ</a>
-                    {% endif %}
+                <nav class="app-pagination pagination">
+                    {% if my_list_page_obj.has_previous %}<a class="button small-button pill-button" href="?{% if list_filter_query %}{{ list_filter_query }}&{% endif %}lists_page={{ my_list_page_obj.previous_page_number }}#profile-my-lists">前へ</a>{% endif %}
                     <span>{{ my_list_page_obj.number }} / {{ my_list_page_obj.paginator.num_pages }} ページ</span>
-                    {% if my_list_page_obj.has_next %}
-                        <a class="button small-button pill-button" href="?{% if list_filter_query %}{{ list_filter_query }}&{% endif %}lists_page={{ my_list_page_obj.next_page_number }}#profile-my-lists">次へ</a>
-                    {% endif %}
+                    {% if my_list_page_obj.has_next %}<a class="button small-button pill-button" href="?{% if list_filter_query %}{{ list_filter_query }}&{% endif %}lists_page={{ my_list_page_obj.next_page_number }}#profile-my-lists">次へ</a>{% endif %}
                 </nav>
             {% endif %}
         </section>
-        <section class="account-panel" aria-label="アカウント">
-            <h3>アカウント</h3>
-            <form method="post" action="{% url 'logout' %}" data-logout-form>
-                {% csrf_token %}
-                <button class="account-row" type="submit">ログアウト</button>
-            </form>
-        </section>
     {% else %}
-        <section id="profile-public-lists">
-            <div class="profile-section-heading">
-                <div>
-                    <h3>公開リスト</h3>
-                    <p>公開されているリストだけを表示しています。</p>
+        {% if not can_view_profile_details %}
+            <section class="private-profile-panel">
+                <h3>このアカウントは非公開です</h3>
+                <p>承認済みフォロワーのみ、公開リストや詳しいプロフィール情報を見ることができます。</p>
+            </section>
+        {% else %}
+            <section id="profile-public-lists">
+                <div class="profile-section-heading"><div><h3>公開リスト</h3><p>公開されているリストを表示しています。</p></div></div>
+                <div class="profile-list-grid discover-grid">
+                    {% for group in goal_groups %}
+                        {% include "goals/partials/public_list_overview_card.html" with group=group %}
+                    {% empty %}
+                        <p class="notice">表示できる公開リストはまだありません。</p>
+                    {% endfor %}
                 </div>
-            </div>
-            <div class="profile-list-grid discover-grid">
-                {% for group in goal_groups %}
-                    {% include "goals/partials/public_list_overview_card.html" with group=group %}
-                {% empty %}
-                    <p class="notice">表示できるマイリストはまだありません。</p>
-                {% endfor %}
-            </div>
-        </section>
+            </section>
+        {% endif %}
     {% endif %}
 </div>
 
 <script>
-    document.addEventListener("click", (event) => {
-        document.querySelectorAll("[data-menu-popover][open]").forEach((menu) => {
-            if (!menu.contains(event.target)) {
-                menu.removeAttribute("open");
+(function () {
+    const menu = document.querySelector(".profile-page-menu");
+    if (menu) {
+        document.addEventListener("click", (event) => {
+            if (menu.open && !menu.contains(event.target)) {
+                menu.open = false;
             }
         });
-    });
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && menu.open) {
+                menu.open = false;
+            }
+        });
+    }
 
+    const toast = document.createElement("div");
+    let toastTimer = null;
+    toast.className = "profile-share-toast";
+    toast.setAttribute("role", "status");
+    toast.setAttribute("aria-live", "polite");
+    document.body.appendChild(toast);
+
+    const showToast = (message) => {
+        window.clearTimeout(toastTimer);
+        toast.textContent = message;
+        toast.classList.add("is-visible");
+        toastTimer = window.setTimeout(() => {
+            toast.classList.remove("is-visible");
+        }, 2600);
+    };
+
+    const copyText = async (text) => {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return true;
+        }
+        const area = document.createElement("textarea");
+        area.value = text;
+        area.setAttribute("readonly", "");
+        area.style.position = "fixed";
+        area.style.top = "0";
+        area.style.left = "0";
+        area.style.width = "1px";
+        area.style.height = "1px";
+        area.style.opacity = "0";
+        document.body.appendChild(area);
+        area.focus();
+        area.select();
+        area.setSelectionRange(0, area.value.length);
+        const copied = document.execCommand("copy");
+        area.remove();
+        if (!copied) {
+            throw new Error("copy failed");
+        }
+        return true;
+    };
     document.querySelectorAll("[data-share-profile]").forEach((button) => {
         button.addEventListener("click", async () => {
-            const shareData = {
-                title: button.dataset.shareTitle,
-                text: button.dataset.shareText,
-                url: button.dataset.shareUrl,
-            };
-            if (navigator.share) {
-                try {
-                    await navigator.share(shareData);
-                    return;
-                } catch (error) {
-                    if (error.name === "AbortError") {
-                        return;
-                    }
-                }
-            }
+            const url = button.dataset.shareUrl || window.location.href;
             try {
-                await navigator.clipboard.writeText(shareData.url);
-                button.textContent = "URLをコピーしました";
-                setTimeout(() => {
-                    button.textContent = "プロフィールをシェア";
-                }, 1800);
+                await copyText(url);
+                showToast("\u30d7\u30ed\u30d5\u30a3\u30fc\u30eb\u306e\u30ea\u30f3\u30af\u3092\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f");
+                if (menu && menu.open) {
+                    menu.open = false;
+                }
             } catch (error) {
-                window.prompt("プロフィールURLをコピーしてください", shareData.url);
+                showToast("\u30ea\u30f3\u30af\u3092\u30b3\u30d4\u30fc\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f");
             }
         });
     });
-
-    document.querySelectorAll("[data-logout-form]").forEach((form) => {
-        form.addEventListener("submit", (event) => {
-            if (!window.confirm("ログアウトしますか？")) {
-                event.preventDefault();
-            }
-        });
-    });
+})();
 </script>
 {% endblock %}

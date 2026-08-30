@@ -3,83 +3,180 @@
 {% block title %}{{ template.title }} - テンプレート{% endblock %}
 
 {% block content %}
-{% include "goals/partials/list_detail_notebook_styles.html" %}
 <style>
-    .template-detail-nav {
-        margin-bottom: 12px;
+    .template-detail-page {
+        display: grid;
+        gap: 18px;
+        width: 100%;
+        box-sizing: border-box;
+        max-width: 640px;
+        margin: 0 auto;
+        padding-bottom: calc(132px + env(safe-area-inset-bottom));
+        overflow-x: hidden;
     }
-    .template-detail-nav a {
-        color: #6a5538;
-        font-weight: 700;
+    .template-back-link {
+        width: fit-content;
+        color: var(--app-text, #37352f);
+        font-weight: 800;
         text-decoration: none;
     }
-    .template-title-row {
+    .template-back-link:hover,
+    .template-back-link:focus {
+        text-decoration: underline;
+        text-underline-offset: 4px;
+    }
+    .template-hero {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: start;
-        gap: 14px;
-        margin-bottom: 14px;
+        gap: 7px;
+        min-width: 0;
+        box-sizing: border-box;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 16px;
+        background: #fff;
+        padding: 16px 15px;
+        box-shadow: 0 1px 2px rgba(15, 15, 15, 0.03);
     }
-    .template-title-row h2 {
+    .template-hero h2 {
         margin: 0;
+        color: var(--app-text, #37352f);
+        font-size: clamp(24px, 6vw, 32px);
+        line-height: 1.25;
+        letter-spacing: 0;
+        overflow-wrap: anywhere;
     }
-    .template-title-meta {
-        margin: 5px 0 0;
-        color: #7a6750;
+    .template-hero-meta {
+        margin: 0;
+        color: var(--app-muted, #787774);
         font-size: 13px;
         font-weight: 700;
+        overflow-wrap: anywhere;
     }
-    .template-title-action {
-        display: flex;
-        justify-content: flex-end;
+    .template-hero-desc {
+        margin: 1px 0 0;
+        color: var(--app-muted, #787774);
+        line-height: 1.6;
+        overflow-wrap: anywhere;
+        word-break: normal;
     }
-    .template-title-action .button {
+    .template-items-section {
+        display: grid;
+        gap: 8px;
+        min-width: 0;
+    }
+    .template-items-section h3 {
+        margin: 0;
+        color: var(--app-text, #37352f);
+        font-size: var(--ui-section-title-size, 18px);
+        font-weight: 600;
+        line-height: 1.3;
+    }
+    .template-item-list {
+        display: grid;
+        gap: 7px;
+        min-width: 0;
+    }
+    .template-item-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 9px;
+        align-items: center;
+        min-width: 0;
+        box-sizing: border-box;
+        min-height: 40px;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 14px;
+        background: #fff;
+        padding: 7px 11px;
+    }
+    .template-item-title {
+        min-width: 0;
+        color: var(--app-text, #37352f);
+        font-size: 14px;
+        font-weight: 650;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
+    }
+    .template-item-tag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 999px;
+        background: var(--app-subtle-bg, #f7f7f5);
+        color: var(--app-muted, #787774);
+        padding: 0 8px;
+        font-size: 12px;
+        font-weight: 700;
         white-space: nowrap;
     }
+    .template-use-bar {
+        position: relative;
+        z-index: 2;
+        display: grid;
+        margin-top: 14px;
+        margin-bottom: 16px;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 18px;
+        background: rgba(255,255,255,0.94);
+        padding: 10px;
+        box-shadow: 0 -6px 18px rgba(15, 15, 15, 0.06);
+        backdrop-filter: blur(14px);
+        pointer-events: auto;
+    }
+    .template-use-bar .button {
+        width: 100%;
+        min-height: 48px;
+        pointer-events: auto;
+    }
     @media (max-width: 768px) {
-        .template-title-row {
-            grid-template-columns: 1fr;
-            gap: 8px;
+        .template-detail-page {
+            max-width: none;
+            gap: 16px;
         }
-        .template-title-action {
-            justify-content: flex-end;
+        .template-hero {
+            border-radius: 15px;
+            padding: 15px 14px;
+        }
+        .template-item-row {
+            padding: 7px 10px;
         }
     }
 </style>
 
-<div class="template-detail-nav">
-    <a href="{% url 'goals:template_list' %}">← テンプレート一覧</a>
-</div>
+<div class="template-detail-page">
+    <a class="template-back-link" href="{% url 'goals:template_list' %}">← テンプレート一覧</a>
 
-<div class="page-title template-title-row">
-    <div>
+    <section class="template-hero">
         <h2>{{ template.title }}</h2>
-        <p class="template-title-meta">目標 {{ template.target_count }}件</p>
-    </div>
-    <form class="template-title-action" method="post" action="{% url 'goals:use_template' template.slug %}">
-        {% csrf_token %}
-        <button class="button" type="submit">このテンプレートを使う</button>
-    </form>
-</div>
+        <p class="template-hero-meta">{{ template.items|length }}項目・{{ usage_label }}</p>
+        <p class="template-hero-desc">{{ template.summary }}</p>
+    </section>
 
-<section class="yearly-notebook book" style="margin-top: 14px;">
-    <header class="notebook-header">
-        <h3>リスト一覧</h3>
-    </header>
-
-    {% include "goals/partials/list_detail_notebook_pages.html" with left_goals=display_items|slice:":10" right_goals=display_items|slice:"10:" row_template="goals/partials/template_notebook_item.html" %}
-</section>
+    <section class="template-items-section" aria-label="含まれる項目">
+        <h3>含まれる項目</h3>
+        <div class="template-item-list">
+            {% for goal in display_items %}
+                <div class="template-item-row">
+                    <span class="template-item-title">{{ goal.title }}</span>
+                    <span class="template-item-tag">{{ goal.category_label }}</span>
+                </div>
+            {% empty %}
+                <p class="notice">項目はまだありません。</p>
+            {% endfor %}
+        </div>
+    </section>
 
     {% if page_obj.paginator.num_pages > 1 %}
         <nav class="app-pagination pagination">
-            {% if page_obj.has_previous %}
-                <a class="button small-button pill-button" href="?page={{ page_obj.previous_page_number }}">前へ</a>
-            {% endif %}
+            {% if page_obj.has_previous %}<a class="button small-button pill-button" href="?page={{ page_obj.previous_page_number }}">前へ</a>{% endif %}
             <span>{{ page_obj.number }} / {{ page_obj.paginator.num_pages }} ページ</span>
-            {% if page_obj.has_next %}
-                <a class="button small-button pill-button" href="?page={{ page_obj.next_page_number }}">次へ</a>
-            {% endif %}
+            {% if page_obj.has_next %}<a class="button small-button pill-button" href="?page={{ page_obj.next_page_number }}">次へ</a>{% endif %}
         </nav>
     {% endif %}
-</section>
+
+    <form class="template-use-bar" method="post" action="{% url 'goals:use_template' template.slug %}">
+        {% csrf_token %}
+        <button class="button primary-button" type="submit">このテンプレートを使う</button>
+    </form>
+</div>
 {% endblock %}

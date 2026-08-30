@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 import os
+from django.core.exceptions import ImproperlyConfigured
 from importlib.util import find_spec
 from pathlib import Path
 
@@ -19,22 +20,98 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 WHITENOISE_AVAILABLE = find_spec('whitenoise') is not None
 
 
+def load_dotenv(path):
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding='utf-8').splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, value = line.split('=', 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        os.environ.setdefault(key, value)
+
+
+def env_bool(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in ('true', '1', 'yes', 'on'):
+        return True
+    if normalized in ('false', '0', 'no', 'off'):
+        return False
+    return default
+
+
+def env_database_ssl_require(debug):
+    return env_bool('DATABASE_SSL_REQUIRE', not debug)
+
+
+def env_int(name, default=0):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ImproperlyConfigured(f'{name} must be an integer.') from exc
+
+
+def env_list(name):
+    value = os.environ.get(name, '')
+    return [item.strip() for item in value.split(',') if item.strip()]
+
+
+load_dotenv(BASE_DIR / '.env')
+
+CLOUDINARY_URL = os.environ.get('CLOUDINARY_URL', '').strip()
+CLOUDINARY_CREDENTIALS = (
+    os.environ.get('CLOUDINARY_CLOUD_NAME', '').strip(),
+    os.environ.get('CLOUDINARY_API_KEY', '').strip(),
+    os.environ.get('CLOUDINARY_API_SECRET', '').strip(),
+)
+USE_CLOUDINARY_MEDIA = env_bool('USE_CLOUDINARY_MEDIA', bool(CLOUDINARY_URL or all(CLOUDINARY_CREDENTIALS)))
+CLOUDINARY_AVAILABLE = find_spec('cloudinary') is not None and find_spec('cloudinary_storage') is not None
+if USE_CLOUDINARY_MEDIA:
+    if not CLOUDINARY_AVAILABLE:
+        raise ImproperlyConfigured(
+            'Cloudinary media storage requires cloudinary and django-cloudinary-storage to be installed.'
+        )
+    if not CLOUDINARY_URL and not all(CLOUDINARY_CREDENTIALS):
+        raise ImproperlyConfigured(
+            'Set CLOUDINARY_URL or CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET.'
+        )
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get(
-    'SECRET_KEY',
-    'django-insecure-_3((4grx&o+3e)a-*-f!kv+cw#rs_35g#d2cqv&_v$1(a@x4ug',
+ENVIRONMENT = os.environ.get('DJANGO_ENV', os.environ.get('ENVIRONMENT', 'local')).lower()
+IS_PRODUCTION = (
+    ENVIRONMENT in ('production', 'prod')
+    or env_bool('DJANGO_PRODUCTION', False)
+    or bool(os.environ.get('RENDER_EXTERNAL_HOSTNAME'))
 )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes', 'on')
+DEBUG = env_bool('DEBUG', not IS_PRODUCTION)
+
+# SECURITY WARNING: keep the secret key used in production secret!
+DEVELOPMENT_SECRET_KEY = 'django-insecure-_3((4grx&o+3e)a-*-f!kv+cw#rs_35g#d2cqv&_v$1(a@x4ug'
+SECRET_KEY = os.environ.get('SECRET_KEY', DEVELOPMENT_SECRET_KEY)
+
+if IS_PRODUCTION:
+    if DEBUG:
+        raise ImproperlyConfigured('DEBUG must be False in production.')
+    if SECRET_KEY == DEVELOPMENT_SECRET_KEY or SECRET_KEY.startswith('django-insecure-'):
+        raise ImproperlyConfigured('SECRET_KEY must be set to a secure environment variable in production.')
 
 allowed_hosts = os.environ.get('ALLOWED_HOSTS')
 render_external_hostname = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 if allowed_hosts:
-    ALLOWED_HOSTS = [host.strip() for host in allowed_hosts.split(',') if host.strip()]
+    ALLOWED_HOSTS = env_list('ALLOWED_HOSTS')
 elif render_external_hostname:
     ALLOWED_HOSTS = [render_external_hostname, 'localhost', '127.0.0.1']
 else:
@@ -45,9 +122,7 @@ if render_external_hostname:
     CSRF_TRUSTED_ORIGINS.append(f'https://{render_external_hostname}')
 csrf_trusted_origins = os.environ.get('CSRF_TRUSTED_ORIGINS')
 if csrf_trusted_origins:
-    CSRF_TRUSTED_ORIGINS.extend(
-        origin.strip() for origin in csrf_trusted_origins.split(',') if origin.strip()
-    )
+    CSRF_TRUSTED_ORIGINS.extend(env_list('CSRF_TRUSTED_ORIGINS'))
 
 
 # Application definition
@@ -62,12 +137,19 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 ]
 
+if USE_CLOUDINARY_MEDIA:
+    INSTALLED_APPS.extend([
+        'cloudinary_storage',
+        'cloudinary',
+    ])
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'goals.middleware.UserActivityMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -106,13 +188,14 @@ DATABASES = {
 }
 
 DATABASE_URL = os.environ.get('DATABASE_URL')
+DATABASE_SSL_REQUIRE = env_database_ssl_require(DEBUG)
 if DATABASE_URL:
     import dj_database_url
 
     DATABASES['default'] = dj_database_url.config(
         default=DATABASE_URL,
         conn_max_age=600,
-        ssl_require=not DEBUG,
+        ssl_require=DATABASE_SSL_REQUIRE,
     )
 
 
@@ -153,9 +236,20 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+if USE_CLOUDINARY_MEDIA and all(CLOUDINARY_CREDENTIALS):
+    CLOUDINARY_STORAGE = {
+        'CLOUD_NAME': CLOUDINARY_CREDENTIALS[0],
+        'API_KEY': CLOUDINARY_CREDENTIALS[1],
+        'API_SECRET': CLOUDINARY_CREDENTIALS[2],
+    }
+
 STORAGES = {
     'default': {
-        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+        'BACKEND': (
+            'cloudinary_storage.storage.MediaCloudinaryStorage'
+            if USE_CLOUDINARY_MEDIA
+            else 'django.core.files.storage.FileSystemStorage'
+        ),
     },
     'staticfiles': {
         'BACKEND': (
@@ -170,7 +264,28 @@ MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SESSION_COOKIE_SECURE = env_bool('SESSION_COOKIE_SECURE', IS_PRODUCTION)
+CSRF_COOKIE_SECURE = env_bool('CSRF_COOKIE_SECURE', IS_PRODUCTION)
+SECURE_SSL_REDIRECT = env_bool('SECURE_SSL_REDIRECT', IS_PRODUCTION)
+SECURE_HSTS_SECONDS = env_int('SECURE_HSTS_SECONDS', 0)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool('SECURE_HSTS_INCLUDE_SUBDOMAINS', False)
+SECURE_HSTS_PRELOAD = env_bool('SECURE_HSTS_PRELOAD', False)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = os.environ.get('SECURE_REFERRER_POLICY', 'same-origin')
+X_FRAME_OPTIONS = os.environ.get('X_FRAME_OPTIONS', 'DENY')
 
 LOGIN_URL = 'login'
-LOGIN_REDIRECT_URL = '/'
+LOGIN_REDIRECT_URL = '/yearly/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
+
+EMAIL_BACKEND = os.environ.get(
+    'EMAIL_BACKEND',
+    'django.core.mail.backends.console.EmailBackend',
+)
+EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_USE_TLS = env_bool('EMAIL_USE_TLS', False)
+EMAIL_USE_SSL = env_bool('EMAIL_USE_SSL', False)
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@wishly.local')

@@ -1,0 +1,11 @@
+{% if page_obj.paginator.num_pages > 1 %}
+    <nav class="pagination" aria-label="ページネーション">
+        {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if visibility %}&visibility={{ visibility }}{% endif %}">前へ</a>
+        {% endif %}
+        <span>{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if visibility %}&visibility={{ visibility }}{% endif %}">次へ</a>
+        {% endif %}
+    </nav>
+{% endif %}

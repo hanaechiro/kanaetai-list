@@ -1,110 +1,208 @@
 {% extends "goals/base.html" %}
 
-{% block title %}みんなのマイリスト - 叶えたいことリスト{% endblock %}
+{% block title %}発見 - Wishly{% endblock %}
 
 {% block content %}
 <style>
-    .discover-hero {
-        margin-bottom: 18px;
-    }
-    .discover-hero h2 {
-        margin-bottom: 6px;
-    }
-    .discover-hero p {
-        margin: 0;
-        color: #71675c;
-    }
-    .search-panel {
-        display: grid;
-        gap: 8px;
-        margin-bottom: 18px;
-        padding: 12px;
-    }
-    .search-row {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        gap: 8px;
-        align-items: center;
-    }
-    .search-row label {
-        display: block;
-        margin-bottom: 4px;
-        color: #7a6750;
-        font-size: 12px;
-        font-weight: 700;
-    }
-    .search-actions {
-        display: flex;
-        grid-column: 1 / -1;
-        gap: 10px;
-        align-items: center;
-        justify-content: flex-end;
-        align-self: end;
-        text-align: right;
-    }
-    .clear-search-link {
-        color: #7a6750;
-        font-size: 12px;
-        text-decoration: none;
-        text-underline-offset: 3px;
-    }
-    .clear-search-link:hover,
-    .clear-search-link:focus,
-    .clear-search-link:active {
-        text-decoration: underline;
-    }
+    .discover-page { display: grid; gap: 22px; padding-bottom: calc(120px + env(safe-area-inset-bottom)); }
+    .discover-head { display: grid; gap: 16px; }
+    .discover-title-row { display: flex; align-items: center; gap: 12px; }
+    .discover-title-row h2 { margin: 0; color: var(--app-text, #37352f); font-size: clamp(30px, 8vw, 40px); line-height: 1.1; letter-spacing: 0; }
+    .discover-head p { margin: -8px 0 0; color: var(--app-muted, #787774); font-size: 14px; line-height: 1.7; }
+    .discover-search-form { display: grid; gap: 8px; }
+    .discover-search-box { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 54px; border: 1px solid var(--app-border, #e5e5e5); border-radius: 999px; background: var(--app-subtle-bg, #f7f7f5); padding: 7px 8px 7px 16px; }
+    .discover-search-form,
+    .discover-search-box { scroll-margin-top: 0; }
+    .discover-search-box input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--app-text, #37352f); font-size: 16px !important; transform: none; }
+    .discover-search-box input:focus { transform: none; scroll-margin-top: 0; }
+    .discover-search-box button { min-height: 38px; padding-inline: 17px; }
+    .discover-search-tools { display: flex; justify-content: flex-end; }
+    .discover-section { display: grid; gap: 10px; }
+    .discover-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .discover-section h3 { margin: 0; color: var(--app-text, #37352f); font-size: 18px; line-height: 1.3; }
+    .discover-section-link { color: var(--app-muted, #787774); font-size: 12px; font-weight: 800; text-decoration: none; }
+    .keyword-chips { display: flex; flex-wrap: nowrap; gap: 9px; overflow-x: auto; padding: 1px 0 2px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+    .keyword-chips::-webkit-scrollbar { display: none; }
+    .keyword-chip { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; min-height: 36px; border: 1px solid var(--app-border, #e5e5e5); border-radius: 999px; background: #fff; color: var(--app-text, #37352f); padding: 0 15px; font-size: 13px; font-weight: 850; text-decoration: none; white-space: nowrap; }
+    .keyword-chip.is-active { background: var(--app-text, #37352f); border-color: var(--app-text, #37352f); color: #fff; }
+    .discover-card-list { display: grid; gap: var(--ui-card-gap, 9px); }
+    .discover-list-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 58px; border: 1px solid var(--app-border, #e5e5e5); border-radius: 14px; background: #fff; padding: var(--ui-compact-card-padding-y, 10px) var(--ui-compact-card-padding-x, 13px); color: inherit; text-decoration: none; box-shadow: 0 1px 2px rgba(15, 15, 15, 0.03); }
+    .discover-list-card h4, .discover-list-card p { margin: 0; }
+    .discover-list-card h4 { color: var(--app-text, #37352f); font-size: var(--ui-list-title-size, 17px); font-weight: var(--ui-list-title-weight, 680); line-height: 1.4; overflow-wrap: anywhere; }
+    .discover-list-main { display: grid; gap: 5px; min-width: 0; }
+    .discover-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 0 !important; color: var(--app-muted, #787774); font-size: 12px; font-weight: 600; line-height: 1.35; }
+    .discover-action-count { display: inline-flex; align-items: center; gap: 4px; min-width: 0; white-space: nowrap; }
+    .discover-action-count svg { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .discover-action-count .heart-symbol { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; font-size: 15px; line-height: 1; }
+    .meta-dot::before { content: "・"; color: var(--app-muted, #787774); }
+    .discover-arrow { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; color: var(--app-muted, #787774); }
+    .discover-arrow::before { content: "\203A"; font-size: 24px; line-height: 1; }
+    .discover-user-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 58px; border: 1px solid var(--app-border, #e5e5e5); border-radius: 14px; background: #fff; padding: 9px 12px; box-shadow: 0 1px 2px rgba(15, 15, 15, 0.03); }
+    .discover-user-card .avatar { text-decoration: none; }
+    .discover-user-card .avatar { width: 42px; height: 42px; font-size: 15px; }
+    .discover-user-name { margin: 0; color: var(--app-text, #37352f); font-size: 15px; font-weight: 650; line-height: 1.25; }
+    .discover-user-meta { margin: 1px 0 0; color: var(--app-muted, #787774); font-size: 12px; line-height: 1.25; }
+    .discover-user-actions { display: flex; align-items: center; gap: 7px; }
+    .discover-user-actions form { margin: 0; }
+    .follow-state-button { min-width: 84px; height: 36px; min-height: 36px !important; justify-content: center; background: var(--app-text, #37352f) !important; border-color: var(--app-text, #37352f) !important; color: #fff !important; white-space: nowrap; }
+    .follow-state-button.is-following, .follow-state-button.is-pending { background: #fff !important; border-color: var(--app-border, #e5e5e5) !important; color: var(--app-text, #37352f) !important; }
+    .result-tabs { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+    .result-tabs::-webkit-scrollbar { display: none; }
+    .result-tabs a { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; border: 1px solid var(--app-border, #e5e5e5); border-radius: 999px; background: #fff; color: var(--app-muted, #787774); padding: 0 14px; font-size: 13px; font-weight: 800; text-decoration: none; white-space: nowrap; }
+    .result-tabs a.is-active { color: #fff; border-color: var(--app-text, #37352f); background: var(--app-text, #37352f); }
+    .private-badge { display: inline-flex; width: fit-content; margin-top: 5px; border: 1px solid var(--app-border, #e5e5e5); border-radius: 999px; background: var(--app-subtle-bg, #f7f7f5); color: var(--app-text, #37352f); padding: 3px 8px; font-size: 12px; font-weight: 700; }
     @media (max-width: 760px) {
-        .search-row {
-            grid-template-columns: 1fr;
-            align-items: stretch;
-        }
-        .search-actions {
-            justify-content: flex-end;
-            text-align: right;
-        }
-        .discover-grid {
-            grid-template-columns: 1fr;
-        }
+        .discover-page { gap: 20px; }
+        .discover-list-card { min-height: 56px; border-radius: 14px; padding: 10px 12px; }
+        .discover-user-card { min-height: 56px; padding: 9px 11px; }
+        .follow-state-button { min-width: auto; padding-inline: 12px; }
     }
 </style>
 
-<div class="page-title discover-hero">
-    <div>
-        <h2>みんなのマイリスト</h2>
-        <p>気になるノートを探して、詳細ページでゆっくり読めます。</p>
-    </div>
+<div class="discover-page">
+    <header class="discover-head">
+        <div class="discover-title-row">
+            <h2>発見</h2>
+        </div>
+        <p>みんなの叶えたいことを見つけよう</p>
+        <form id="public-search" method="get" class="discover-search-form">
+            <div class="discover-search-box">
+                <input id="q" type="search" name="q" value="{{ query }}" placeholder="リストやユーザーを検索" aria-label="リストやユーザーを検索">
+                <button class="button primary-button pill-button" type="submit">検索</button>
+            </div>
+            {% if is_search_mode %}<div class="discover-search-tools"><a class="clear-search-link" href="{% url 'goals:public_goal_list' %}">条件をクリア</a></div>{% endif %}
+        </form>
+    </header>
+
+    {% if not is_search_mode %}
+        <section class="discover-section" aria-label="人気のキーワード">
+            <div class="discover-section-head"><h3>人気のキーワード</h3></div>
+            <div class="keyword-chips">
+                {% for keyword in popular_keywords %}<a class="keyword-chip {% if query == keyword %}is-active{% endif %}" href="?q={{ keyword|urlencode }}">#{{ keyword }}</a>{% endfor %}
+            </div>
+        </section>
+
+        <section class="discover-section" aria-label="おすすめのリスト">
+            <div class="discover-section-head"><h3>おすすめのリスト</h3></div>
+            <div class="discover-card-list">
+                {% for group in goal_groups %}
+                    <a class="discover-list-card" href="{% url 'goals:public_list_detail' group.plan.pk %}">
+                        <span class="discover-list-main">
+                            <h4>{{ group.list_title }}</h4>
+                            <p class="discover-meta" aria-label="リストの反応数">
+                                <span class="discover-action-count"><span class="heart-symbol" aria-hidden="true">♡</span><span>{{ group.like_count }}</span></span>
+                                <span class="discover-action-count"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12.5 20 4l-4.2 16-3.6-6.1L4 12.5Z"></path></svg><span>{{ group.share_count }}</span></span>
+                                <span class="discover-action-count"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 4.75C6 3.78 6.78 3 7.75 3h8.5c.97 0 1.75.78 1.75 1.75v15.1L12 16.2l-6 3.65V4.75Z"></path></svg><span>{{ group.save_count }}</span></span>
+                            </p>
+                        </span>
+                        <span class="discover-arrow" aria-hidden="true"></span>
+                    </a>
+                {% empty %}
+                    <p class="notice">おすすめできる公開リストはまだありません。</p>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="discover-section" aria-label="おすすめのユーザー">
+            <div class="discover-section-head"><h3>おすすめのユーザー</h3></div>
+            <div class="discover-card-list">
+                {% for row in recommended_users %}
+                    <article class="discover-user-card">
+                        <a class="avatar profile-avatar-link" href="{% url 'goals:profile_detail' row.user.username %}" aria-label="プロフィール">
+                            {% if row.profile.icon %}<img src="{{ row.profile.icon.url }}" alt="">{% else %}{{ row.display_name|slice:":1" }}{% endif %}
+                        </a>
+                        <div>
+                            <p class="discover-user-name">{{ row.display_name }}</p>
+                            <p class="discover-user-meta">フォロワー {{ row.followers_count }}人</p>
+                        </div>
+                        <div class="discover-user-actions">
+                            {% if row.can_follow %}
+                                <form method="post" action="{% url 'goals:toggle_follow' row.user.username %}">
+                                    {% csrf_token %}
+                                    <button class="button small-button pill-button follow-state-button {% if row.is_following %}is-following{% elif row.follow_request_status == 'pending' %}is-pending{% endif %}" type="submit">
+                                        {% if row.is_following %}フォロー中{% elif row.follow_request_status == "pending" %}申請中{% else %}フォロー{% endif %}
+                                    </button>
+                                </form>
+                            {% endif %}
+                        </div>
+                    </article>
+                {% empty %}
+                    <p class="notice">おすすめできるユーザーはまだいません。</p>
+                {% endfor %}
+            </div>
+        </section>
+    {% else %}
+        <section class="discover-section" aria-label="検索結果">
+            <div class="discover-section-head">
+                <h3>{% if query %}「{{ query }}」の検索結果{% else %}検索結果{% endif %}</h3>
+            </div>
+        </section>
+
+        <section class="discover-section" aria-label="リスト検索結果">
+            <div class="discover-section-head"><h3>リスト</h3></div>
+            <div class="discover-card-list">
+                {% for group in goal_groups %}
+                    <a class="discover-list-card" href="{% url 'goals:public_list_detail' group.plan.pk %}">
+                        <span class="discover-list-main">
+                            <h4>{{ group.list_title }}</h4>
+                            <p class="discover-meta" aria-label="リストの反応数">
+                                <span class="discover-action-count"><span class="heart-symbol" aria-hidden="true">♡</span><span>{{ group.like_count }}</span></span>
+                                <span class="discover-action-count"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12.5 20 4l-4.2 16-3.6-6.1L4 12.5Z"></path></svg><span>{{ group.share_count }}</span></span>
+                                <span class="discover-action-count"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 4.75C6 3.78 6.78 3 7.75 3h8.5c.97 0 1.75.78 1.75 1.75v15.1L12 16.2l-6 3.65V4.75Z"></path></svg><span>{{ group.save_count }}</span></span>
+                            </p>
+                        </span>
+                        <span class="discover-arrow" aria-hidden="true"></span>
+                    </a>
+                {% empty %}
+                    <p class="notice">条件に合うリストはありません。</p>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="discover-section" aria-label="ユーザー検索結果">
+            <div class="discover-section-head"><h3>ユーザー</h3></div>
+            <div class="discover-card-list">
+                {% for row in user_results %}
+                    <article class="discover-user-card">
+                        <a class="avatar profile-avatar-link" href="{% url 'goals:profile_detail' row.user.username %}" aria-label="プロフィール">
+                            {% if row.profile.icon %}<img src="{{ row.profile.icon.url }}" alt="">{% else %}{{ row.display_name|slice:":1" }}{% endif %}
+                        </a>
+                        <div>
+                            <p class="discover-user-name">{{ row.display_name }}</p>
+                            <p class="discover-user-meta">@{{ row.user.username }}</p>
+                            {% if row.is_private %}<span class="private-badge">非公開アカウント</span>{% endif %}
+                        </div>
+                        <div class="discover-user-actions">
+                            {% if row.can_follow %}
+                                <form method="post" action="{% url 'goals:toggle_follow' row.user.username %}">
+                                    {% csrf_token %}
+                                    <button class="button small-button pill-button follow-state-button {% if row.is_following %}is-following{% elif row.follow_request_status == 'pending' %}is-pending{% endif %}" type="submit">
+                                        {% if row.is_following %}フォロー中{% elif row.follow_request_status == "pending" %}申請中{% else %}{% if row.is_private %}フォロー申請{% else %}フォロー{% endif %}{% endif %}
+                                    </button>
+                                </form>
+                            {% endif %}
+                            <a class="discover-arrow" href="{% url 'goals:profile_detail' row.user.username %}" aria-label="プロフィールを見る"></a>
+                        </div>
+                    </article>
+                {% empty %}
+                    <p class="notice">条件に合うユーザーはありません。</p>
+                {% endfor %}
+            </div>
+        </section>
+    {% endif %}
+
+    {% if is_search_mode and result_type == "users" and user_page_obj and user_page_obj.paginator.num_pages > 1 %}
+        <nav class="app-pagination pagination">
+            {% if user_page_obj.has_previous %}<a class="button small-button pill-button" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ user_page_obj.previous_page_number }}">前へ</a>{% endif %}
+            <span>{{ user_page_obj.number }} / {{ user_page_obj.paginator.num_pages }} ページ</span>
+            {% if user_page_obj.has_next %}<a class="button small-button pill-button" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ user_page_obj.next_page_number }}">次へ</a>{% endif %}
+        </nav>
+    {% elif is_search_mode and page_obj and page_obj.paginator.num_pages > 1 and result_type != "users" %}
+        <nav class="app-pagination pagination">
+            {% if page_obj.has_previous %}<a class="button small-button pill-button" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.previous_page_number }}">前へ</a>{% endif %}
+            <span>{{ page_obj.number }} / {{ page_obj.paginator.num_pages }} ページ</span>
+            {% if page_obj.has_next %}<a class="button small-button pill-button" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.next_page_number }}">次へ</a>{% endif %}
+        </nav>
+    {% endif %}
 </div>
-
-<section class="panel search-panel">
-    <form method="get" class="search-row">
-        <div>
-            <label for="q">キーワード</label>
-            <input id="q" type="text" name="q" value="{{ query }}" placeholder="リスト名・項目名・ユーザー名">
-        </div>
-        <div class="search-actions">
-            <a class="clear-search-link" href="{% url 'goals:public_goal_list' %}">条件をクリア</a>
-            <button class="button pill-button" type="submit">検索</button>
-        </div>
-    </form>
-</section>
-
-<section class="discover-grid">
-    {% for group in goal_groups %}
-        {% include "goals/partials/public_list_overview_card.html" with group=group %}
-    {% empty %}
-        <p class="notice">条件に合う公開マイリストはまだありません。</p>
-    {% endfor %}
-</section>
-
-{% if page_obj.paginator.num_pages > 1 %}
-    <nav class="app-pagination pagination">
-        {% if page_obj.has_previous %}
-            <a class="button small-button pill-button" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.previous_page_number }}">前へ</a>
-        {% endif %}
-        <span>{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}ページ</span>
-        {% if page_obj.has_next %}
-            <a class="button small-button pill-button" href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.next_page_number }}">次へ</a>
-        {% endif %}
-    </nav>
-{% endif %}
 {% endblock %}

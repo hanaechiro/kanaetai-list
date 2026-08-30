@@ -1,0 +1,282 @@
+{% extends "goals/base.html" %}
+
+{% block title %}通知 - Wishly{% endblock %}
+
+{% block content %}
+<style>
+    .notification-page {
+        display: grid;
+        gap: 12px;
+    }
+    .notification-page .app-form-header {
+        margin-bottom: 0 !important;
+    }
+    .notification-heading {
+        display: grid;
+        gap: 10px;
+    }
+    .notification-intro {
+        margin: 0;
+    }
+    .notification-heading .notification-filter-tabs {
+        margin-top: 4px;
+    }
+    .notification-filter-tabs {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        padding-bottom: 2px;
+        scrollbar-width: none;
+    }
+    .notification-filter-tabs::-webkit-scrollbar {
+        display: none;
+    }
+    .notification-tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 999px;
+        padding: 8px 12px;
+        color: var(--app-text, #37352f);
+        background: #fff;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 700;
+    }
+    .notification-tab.is-active {
+        background: var(--app-text, #37352f);
+        border-color: var(--app-text, #37352f);
+        color: #fff;
+    }
+    .notification-tab-count {
+        display: inline-grid;
+        min-width: 18px;
+        height: 18px;
+        place-items: center;
+        border-radius: 999px;
+        background: #f7f7f5;
+        color: #787774;
+        font-size: 11px;
+        padding: 0 5px;
+    }
+    .notification-tab.is-active .notification-tab-count {
+        background: rgba(255, 255, 255, 0.18);
+        color: #fff;
+    }
+    .notification-stack {
+        display: grid;
+        gap: 14px;
+    }
+    .notification-card {
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 16px;
+        background: #fff;
+        padding: 16px;
+        display: grid;
+        gap: 10px;
+    }
+    .notification-card h3 {
+        margin: 0;
+        color: var(--app-text, #37352f);
+        font-size: 17px;
+    }
+    .notification-row {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 12px;
+        align-items: start;
+        padding: 12px 0;
+        border-top: 1px solid var(--app-border, #e5e5e5);
+    }
+    .notification-row:first-of-type {
+        border-top: 0;
+    }
+    .notification-row p {
+        margin: 0 0 8px;
+        color: var(--app-text, #37352f);
+        line-height: 1.7;
+    }
+    .notification-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .notification-target-link {
+        font-weight: 800;
+        color: var(--app-text, #37352f);
+        text-decoration: none;
+    }
+    .notification-target-link:hover,
+    .notification-target-link:focus {
+        text-decoration: underline;
+        text-underline-offset: 4px;
+    }
+    @media (max-width: 768px) {
+        .notification-card {
+            padding: 14px;
+        }
+    }
+</style>
+
+<div class="notification-page">
+    {% url 'goals:my_profile' as my_profile_url %}
+    <div class="notification-heading">
+        {% include "goals/partials/app_form_header.html" with header_title="通知" back_url=my_profile_url back_label="← マイページへ戻る" %}
+        <p class="meta notification-intro">申請、招待、いいね、保存をまとめて確認できます。</p>
+
+        <nav class="notification-filter-tabs" aria-label="通知カテゴリ">
+            {% for tab in notification_tabs %}
+                <a class="notification-tab {% if notification_category == tab.key %}is-active{% endif %}" href="?category={{ tab.key }}">
+                    {{ tab.label }}
+                    {% if tab.count %}
+                        <span class="notification-tab-count">{{ tab.count }}</span>
+                    {% endif %}
+                </a>
+            {% endfor %}
+        </nav>
+    </div>
+
+    <div class="notification-stack">
+        {% if notification_category == "all" or notification_category == "follow" %}
+            <section class="notification-card">
+                <h3>フォロー申請</h3>
+                {% for item in follow_requests %}
+                    <div class="notification-row">
+                        <a class="avatar" href="{% url 'goals:profile_detail' item.requester.username %}">
+                            {% if item.requester.profile.icon %}
+                                <img src="{{ item.requester.profile.icon.url }}" alt="">
+                            {% else %}
+                                {{ item.requester.profile.display_name|default:item.requester.username|slice:":1" }}
+                            {% endif %}
+                        </a>
+                        <div>
+                            <p>
+                                <a class="notification-target-link" href="{% url 'goals:profile_detail' item.requester.username %}">
+                                    {{ item.requester.profile.display_name|default:item.requester.username }}さん
+                                </a>
+                                からフォロー申請が届いています。プロフィールを確認して、承認または却下できます。
+                            </p>
+                            <div class="notification-actions">
+                                <form method="post" action="{% url 'goals:respond_follow_request' item.pk 'accepted' %}">
+                                    {% csrf_token %}
+                                    <button class="button small-button primary-button" type="submit">承認する</button>
+                                </form>
+                                <form method="post" action="{% url 'goals:respond_follow_request' item.pk 'rejected' %}">
+                                    {% csrf_token %}
+                                    <button class="button small-button secondary-button" type="submit">却下する</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                {% empty %}
+                    <p class="meta">未対応のフォロー申請はありません。</p>
+                {% endfor %}
+            </section>
+        {% endif %}
+
+        {% if notification_category == "all" or notification_category == "collaboration" %}
+            <section class="notification-card">
+                <h3>共同リスト招待</h3>
+                {% for invite in collaboration_invites %}
+                    <div class="notification-row">
+                        <a class="avatar" href="{% url 'goals:profile_detail' invite.inviter.username %}">
+                            {% if invite.inviter.profile.icon %}
+                                <img src="{{ invite.inviter.profile.icon.url }}" alt="">
+                            {% else %}
+                                {{ invite.inviter.profile.display_name|default:invite.inviter.username|slice:":1" }}
+                            {% endif %}
+                        </a>
+                        <div>
+                            <p>
+                                {{ invite.inviter.profile.display_name|default:invite.inviter.username }}さんから
+                                <a class="notification-target-link" href="{% url 'goals:my_list_detail' invite.list.pk %}">
+                                    「{{ invite.list.list_title|default:"マイリスト" }}」
+                                </a>
+                                の共同リストに招待されています。参加前でもリスト内容を確認できます。
+                            </p>
+                            <div class="notification-actions">
+                                <form method="post" action="{% url 'goals:respond_collaboration_invite' invite.pk 'accepted' %}">
+                                    {% csrf_token %}
+                                    <button class="button small-button primary-button" type="submit">参加する</button>
+                                </form>
+                                <form method="post" action="{% url 'goals:respond_collaboration_invite' invite.pk 'declined' %}">
+                                    {% csrf_token %}
+                                    <button class="button small-button secondary-button" type="submit">拒否する</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                {% empty %}
+                    <p class="meta">未対応の共同リスト招待はありません。</p>
+                {% endfor %}
+            </section>
+        {% endif %}
+
+        {% if notification_category == "all" or notification_category == "like" %}
+            <section class="notification-card">
+                <h3>いいね</h3>
+                {% for item in like_notifications %}
+                    <div class="notification-row">
+                        <a class="avatar" href="{% url 'goals:profile_detail' item.user.username %}">
+                            {% if item.user.profile.icon %}
+                                <img src="{{ item.user.profile.icon.url }}" alt="">
+                            {% else %}
+                                {{ item.user.profile.display_name|default:item.user.username|slice:":1" }}
+                            {% endif %}
+                        </a>
+                        <div>
+                            <p>
+                                <a class="notification-target-link" href="{% url 'goals:profile_detail' item.user.username %}">
+                                    {{ item.user.profile.display_name|default:item.user.username }}さん
+                                </a>
+                                が
+                                <a class="notification-target-link" href="{% url 'goals:my_list_detail' item.my_list.pk %}">
+                                    「{{ item.my_list.list_title|default:"マイリスト" }}」
+                                </a>
+                                にいいねしました。
+                            </p>
+                            <p class="meta">{{ item.created_at|date:"Y/m/d H:i" }}</p>
+                        </div>
+                    </div>
+                {% empty %}
+                    <p class="meta">いいね通知はまだありません。</p>
+                {% endfor %}
+            </section>
+        {% endif %}
+
+        {% if notification_category == "all" or notification_category == "save" %}
+            <section class="notification-card">
+                <h3>保存</h3>
+                {% for item in save_notifications %}
+                    <div class="notification-row">
+                        <a class="avatar" href="{% url 'goals:profile_detail' item.user.username %}">
+                            {% if item.user.profile.icon %}
+                                <img src="{{ item.user.profile.icon.url }}" alt="">
+                            {% else %}
+                                {{ item.user.profile.display_name|default:item.user.username|slice:":1" }}
+                            {% endif %}
+                        </a>
+                        <div>
+                            <p>
+                                <a class="notification-target-link" href="{% url 'goals:profile_detail' item.user.username %}">
+                                    {{ item.user.profile.display_name|default:item.user.username }}さん
+                                </a>
+                                が
+                                <a class="notification-target-link" href="{% url 'goals:my_list_detail' item.my_list.pk %}">
+                                    「{{ item.my_list.list_title|default:"マイリスト" }}」
+                                </a>
+                                を保存しました。
+                            </p>
+                            <p class="meta">{{ item.created_at|date:"Y/m/d H:i" }}</p>
+                        </div>
+                    </div>
+                {% empty %}
+                    <p class="meta">保存通知はまだありません。</p>
+                {% endfor %}
+            </section>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

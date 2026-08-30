@@ -1,0 +1,30 @@
+{% extends "goals/base.html" %}
+
+{% block title %}鍵アカウント設定 - Wishly{% endblock %}
+
+{% block content %}
+{% url 'goals:account_settings' as account_settings_url %}
+{% include "goals/partials/app_form_header.html" with header_title="鍵アカウント設定" back_url=account_settings_url back_label="← アカウント設定へ戻る" cancel_url=account_settings_url save_form_id="privacy-form" %}
+
+<form id="privacy-form" class="app-form-card" method="post" novalidate>
+    {% csrf_token %}
+    {% if form.errors %}
+        <div class="form-error-alert" role="alert">
+            <strong>入力内容を確認してください。</strong>
+        </div>
+    {% endif %}
+
+    <section class="app-field{% if form.is_private.errors %} has-error{% endif %}">
+        <label class="app-check-row">
+            {{ form.is_private }}
+            <span>鍵アカウントにする</span>
+        </label>
+        <p class="meta-text">
+            鍵アカウントにすると、承認済みフォロワー以外には公開リストや詳しいプロフィール情報を表示しません。
+        </p>
+        {% for error in form.is_private.errors %}
+            <p class="app-error">{{ error }}</p>
+        {% endfor %}
+    </section>
+</form>
+{% endblock %}

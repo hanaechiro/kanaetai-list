@@ -1,15 +1,181 @@
-<div class="item-detail-header">
-    <a class="app-back-link" href="{{ back_url }}">← {{ back_label }}</a>
+<style>
+    .item-detail-shell {
+        display: grid;
+        gap: 14px;
+        padding-bottom: calc(110px + env(safe-area-inset-bottom));
+    }
+    .item-detail-top-bar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 8px;
+    }
+    .item-detail-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        justify-content: flex-end;
+        white-space: nowrap;
+    }
+    .item-title-card {
+        display: grid;
+        gap: 10px;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: var(--ui-card-radius, 16px);
+        background: #fff;
+        padding: 14px;
+        box-shadow: 0 1px 2px rgba(15, 15, 15, 0.03);
+    }
+    .item-title-main {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 10px;
+        align-items: center;
+    }
+    .item-title-main h2 {
+        margin: 0;
+        font-family: var(--ui-font-family, inherit);
+        color: var(--app-text, #37352f);
+        font-size: var(--ui-list-title-size, 17px);
+        font-weight: var(--ui-list-title-weight, 680);
+        line-height: var(--ui-list-title-line-height, 1.42);
+        letter-spacing: 0;
+        overflow-wrap: anywhere;
+    }
+    .item-detail-card {
+        display: grid;
+        gap: 0;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 18px;
+        background: #fff;
+        overflow: hidden;
+        box-shadow: 0 1px 2px rgba(15, 15, 15, 0.03);
+    }
+    .item-detail-section {
+        display: grid;
+        gap: 7px;
+        padding: 13px 14px;
+        border-bottom: 1px solid var(--app-border, #e5e5e5);
+    }
+    .item-detail-section:last-child {
+        border-bottom: 0;
+    }
+    .item-detail-card .item-detail-info-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 14px;
+    }
+    .item-detail-label {
+        color: var(--app-muted, #787774);
+        font-size: 12px;
+        font-weight: 800;
+        line-height: 1.4;
+        white-space: nowrap;
+        flex: 0 0 auto;
+    }
+    .item-detail-body {
+        margin: 0;
+        color: var(--app-text, #37352f);
+        line-height: 1.7;
+    }
+    .item-detail-meta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        align-items: center;
+    }
+    .item-detail-card .item-detail-info-row .item-detail-meta-row {
+        flex: 1 1 180px;
+        min-width: 0;
+    }
+    .goal-note-canvas {
+        display: grid;
+        gap: 10px;
+        min-width: 0;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 14px;
+        background:
+            linear-gradient(#fff, #fff) padding-box,
+            repeating-linear-gradient(to bottom, transparent 0, transparent 31px, #eeeeec 32px) border-box;
+        padding: 12px 14px;
+    }
+    .goal-note-block {
+        min-width: 0;
+    }
+    .goal-note-text {
+        margin: 0;
+        color: var(--app-text, #37352f);
+        line-height: 1.8;
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
+    }
+    .goal-note-link {
+        display: grid;
+        gap: 2px;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 12px;
+        background: #f7f7f5;
+        padding: 10px 12px;
+        color: var(--app-text, #37352f);
+        text-decoration: none;
+    }
+    .goal-note-link strong {
+        font-size: 14px;
+        overflow-wrap: anywhere;
+    }
+    .goal-note-link span {
+        color: var(--app-muted, #787774);
+        font-size: 12px;
+        overflow-wrap: anywhere;
+    }
+    .goal-note-image {
+        display: grid;
+        gap: 6px;
+        max-width: 520px;
+        min-width: 0;
+    }
+    .goal-note-image a {
+        display: block;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 12px;
+        overflow: hidden;
+        background: #f7f7f5;
+    }
+    .goal-note-image img {
+        display: block;
+        width: 100%;
+        max-height: 420px;
+        object-fit: contain;
+        background: #f7f7f5;
+    }
+    @media (max-width: 768px) {
+        .item-detail-top-bar {
+            grid-template-columns: minmax(0, 1fr) auto;
+        }
+        .item-detail-actions {
+            gap: 6px;
+        }
+        .item-detail-actions .button {
+            padding-inline: 12px;
+        }
+        .goal-note-canvas {
+            padding: 12px;
+        }
+    }
+</style>
 
-    <div class="item-detail-title-row">
-        <div class="item-detail-title-main">
-            <span class="app-checkbox is-readonly {% if goal.is_done %}is-checked{% endif %}" aria-hidden="true"></span>
-            <h2>{{ goal.title }}</h2>
-        </div>
+<div class="item-detail-shell">
+    <div class="item-detail-top-bar">
+        <a class="app-back-link" href="{{ back_url }}">← {{ back_label }}</a>
+
         {% if can_edit %}
             <div class="item-detail-actions">
-                <a class="button pill-button" href="{% url 'goals:yearly_goal_edit' goal.pk %}">編集</a>
-                <a class="button pill-button danger" href="{% url 'goals:yearly_goal_delete' goal.pk %}">削除</a>
+                {% if can_delete %}
+                    <a class="button pill-button secondary-button danger" href="{% url 'goals:yearly_goal_delete' goal.pk %}">削除</a>
+                {% endif %}
+                <a class="button pill-button primary-button" href="{% url 'goals:yearly_goal_edit' goal.pk %}">編集</a>
             </div>
         {% elif can_save_item or not user.is_authenticated %}
             <div class="item-detail-actions">
@@ -22,70 +188,71 @@
             </div>
         {% endif %}
     </div>
-</div>
 
-<section class="item-detail-card">
-    <div class="item-detail-section">
-        <span class="item-detail-label">タイトル</span>
-        <p class="item-detail-body">{{ goal.title }}</p>
-    </div>
-
-    <div class="item-detail-section">
-        <span class="item-detail-label">メモ</span>
-        <p class="item-detail-body">
-            {% if goal.description %}
-                {{ goal.description|linebreaksbr }}
-            {% else %}
-                <span class="meta">メモはまだありません。</span>
-            {% endif %}
-        </p>
-    </div>
-
-    <div class="item-detail-section">
-        <span class="item-detail-label">カテゴリ</span>
-        <p class="item-detail-body item-detail-meta-row">
-            <span class="status-pill">{{ goal.get_category_display }}</span>
-        </p>
-    </div>
-
-    <div class="item-detail-section">
-        <span class="item-detail-label">公開状態</span>
-        <p class="item-detail-body item-detail-meta-row">
-            <span class="status-pill {% if not year_plan.is_public %}private{% endif %}">
-                このリストは{% if year_plan.is_public %}公開{% else %}非公開{% endif %}
-            </span>
-            <span class="status-pill {% if not goal.item_is_public %}private{% endif %}">
-                項目{% if goal.item_is_public %}公開{% else %}非公開{% endif %}
-            </span>
-        </p>
-    </div>
-
-    <div class="item-detail-section">
-        <span class="item-detail-label">完了状態</span>
-        <p class="item-detail-body item-detail-meta-row">
-            <span class="status-pill {% if not goal.is_done %}private{% endif %}">
-                {% if goal.is_done %}完了済み{% else %}未完了{% endif %}
-            </span>
-            {% if goal.is_done and goal.completed_date %}
-                <span class="completed-date">完了日：{{ goal.completed_date|date:"Y/m/d" }}</span>
-            {% endif %}
-        </p>
-    </div>
-
-    <div class="item-detail-section">
-        <span class="item-detail-label">所属リスト / 作成者</span>
-        <div class="item-detail-body item-detail-owner">
-            <a class="avatar profile-avatar-link" href="{% if can_edit %}{% url 'goals:my_profile' %}{% else %}{% url 'goals:profile_detail' year_plan.user.username %}{% endif %}" aria-label="作成者プロフィール">
-                {% if year_plan.user.profile.icon %}
-                    <img src="{{ year_plan.user.profile.icon.url }}" alt="">
-                {% else %}
-                    {{ year_plan.user.profile.display_name|default:year_plan.user.username|slice:":1" }}
-                {% endif %}
-            </a>
-            <span class="item-detail-owner-text">
-                <span>{{ year_plan.list_title|default:"マイリスト" }}</span>
-                <span class="meta">{{ year_plan.user.profile.display_name|default:year_plan.user.username }}さん</span>
-            </span>
+    <section class="item-title-card">
+        <div class="item-title-main">
+            <span class="app-checkbox is-readonly {% if goal.is_done %}is-checked{% endif %}" aria-hidden="true"></span>
+            <h2>{{ goal.title }}</h2>
         </div>
-    </div>
-</section>
+    </section>
+
+    <section class="item-detail-card">
+        <div class="item-detail-section">
+            <span class="item-detail-label">メモ</span>
+            <div class="item-detail-body goal-note-canvas">
+                {% for block in note_blocks %}
+                    {% if block.type == "text" %}
+                        <p class="goal-note-block goal-note-text">{{ block.text }}</p>
+                    {% elif block.type == "image" %}
+                        <div class="goal-note-block goal-note-image">
+                            <a href="{{ block.image.image.url }}" target="_blank" rel="noopener noreferrer" aria-label="画像を拡大表示">
+                                <img src="{{ block.image.image.url }}" alt="{{ block.image.caption|default:goal.title }}">
+                            </a>
+                            {% if block.image.caption %}
+                                <span class="meta">{{ block.image.caption }}</span>
+                            {% endif %}
+                        </div>
+                    {% elif block.type == "link" %}
+                        <a class="goal-note-block goal-note-link" href="{{ block.link.url }}" target="_blank" rel="noopener noreferrer">
+                            <strong>{{ block.link.title|default:block.link.url }}</strong>
+                            <span>{{ block.link.url }}</span>
+                        </a>
+                    {% endif %}
+                {% empty %}
+                    <p class="goal-note-text"><span class="meta">メモはありません。</span></p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="item-detail-section item-detail-info-row">
+            <span class="item-detail-label">カテゴリ</span>
+            <p class="item-detail-body item-detail-meta-row">
+                <span class="status-pill">{{ goal.get_category_display }}</span>
+            </p>
+        </div>
+
+        <div class="item-detail-section item-detail-info-row">
+            <span class="item-detail-label">公開状態</span>
+            <p class="item-detail-body item-detail-meta-row">
+                <span class="status-pill {% if not year_plan.is_public %}private{% endif %}">
+                    このリストは{% if year_plan.is_public %}公開{% else %}非公開{% endif %}
+                </span>
+                <span class="status-pill {% if not goal.item_is_public %}private{% endif %}">
+                    項目{% if goal.item_is_public %}公開{% else %}非公開{% endif %}
+                </span>
+            </p>
+        </div>
+
+        <div class="item-detail-section item-detail-info-row">
+            <span class="item-detail-label">完了状態</span>
+            <p class="item-detail-body item-detail-meta-row">
+                <span class="status-pill {% if not goal.is_done %}private{% endif %}">
+                    {% if goal.is_done %}完了済み{% else %}未完了{% endif %}
+                </span>
+                {% if goal.is_done and goal.completed_date %}
+                    <span class="completed-date">完了日：{{ goal.completed_date|date:"Y/m/d" }}</span>
+                {% endif %}
+            </p>
+        </div>
+    </section>
+</div>

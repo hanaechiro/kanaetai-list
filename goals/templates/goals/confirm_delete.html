@@ -3,6 +3,30 @@
 {% block title %}削除確認 - 叶えたいことリスト{% endblock %}
 
 {% block content %}
+<style>
+    .delete-actions {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 10px;
+        margin-top: 22px;
+    }
+    .delete-actions .button {
+        min-width: 112px;
+        text-align: center;
+    }
+    @media (max-width: 420px) {
+        .delete-actions {
+            gap: 8px;
+        }
+        .delete-actions .button {
+            min-width: 96px;
+            padding-left: 10px;
+            padding-right: 10px;
+        }
+    }
+</style>
+
 <div class="page-title">
     <h2>削除しますか？</h2>
 </div>
@@ -11,9 +35,9 @@
     {% csrf_token %}
     <p>「{{ object }}」を削除します。</p>
     <p class="meta">マイリストを削除する場合、そのリストに紐づく項目も削除されます。</p>
-    <div class="actions">
-        <button class="button danger" type="submit">削除する</button>
-        <a class="button" href="{{ cancel_url }}">キャンセル</a>
+    <div class="delete-actions">
+        <a class="button secondary-button" href="{{ cancel_url }}">キャンセル</a>
+        <button class="button primary-button" type="submit">削除する</button>
     </div>
 </form>
 {% endblock %}

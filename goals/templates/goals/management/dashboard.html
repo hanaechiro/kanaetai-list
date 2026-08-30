@@ -1,0 +1,95 @@
+{% extends "goals/management/base.html" %}
+
+{% block title %}ダッシュボード - Wishly Management{% endblock %}
+
+{% block content %}
+<header class="management-page-header">
+    <div>
+        <h1>ダッシュボード</h1>
+        <p>Wishlyの公開後に必要な利用状況を確認できます。</p>
+    </div>
+</header>
+
+<section class="kpi-grid" aria-label="KPI">
+    {% for kpi in kpis %}
+        <article class="management-card kpi-card">
+            <span>{{ kpi.label }}</span>
+            <strong>{{ kpi.value }}</strong>
+            {% if kpi.help %}<p>{{ kpi.help }}</p>{% endif %}
+        </article>
+    {% endfor %}
+</section>
+
+<div class="management-grid" style="margin-top: 18px;">
+    <section class="management-card">
+        <div class="management-card-header">
+            <h2>新規ユーザー登録数</h2>
+            <div class="management-filter" style="margin: 0;">
+                <a class="management-button secondary" href="?period=7">7日</a>
+                <a class="management-button secondary" href="?period=30">30日</a>
+                <a class="management-button secondary" href="?period=90">90日</a>
+                <a class="management-button secondary" href="?period=all">全期間</a>
+            </div>
+        </div>
+        <div style="padding: 18px;">
+            <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img" aria-label="新規ユーザー登録数の推移" style="width: 100%; height: auto; display: block;">
+                <line x1="34" y1="192" x2="686" y2="192" stroke="#e1e4e8" />
+                <line x1="34" y1="28" x2="34" y2="192" stroke="#e1e4e8" />
+                {% if chart.points %}
+                    <polyline points="{{ chart.points }}" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                    {% for row in chart.rows %}
+                        <circle cx="{{ row.x }}" cy="{{ row.y }}" r="3.5" fill="#111" />
+                    {% endfor %}
+                {% endif %}
+            </svg>
+            <table class="management-table" style="margin-top: 10px;">
+                <thead><tr><th>日付</th><th>新規登録ユーザー数</th></tr></thead>
+                <tbody>
+                    {% for row in chart.rows %}
+                        <tr><td>{{ row.date|date:"Y/m/d" }}</td><td>{{ row.count }}人</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="management-card">
+        <div class="management-card-header"><h2>Wishly利用状況</h2></div>
+        <div class="kpi-grid" style="padding: 14px;">
+            {% for stat in usage_stats %}
+                <article class="management-card kpi-card">
+                    <span>{{ stat.label }}</span>
+                    <strong>{{ stat.value }}</strong>
+                </article>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="management-card">
+        <div class="management-card-header"><h2>最近の動き</h2></div>
+        <table class="management-table">
+            <thead><tr><th>日時</th><th>種類</th><th>内容</th></tr></thead>
+            <tbody>
+                {% for activity in recent_activities %}
+                    <tr>
+                        <td>{{ activity.at|date:"Y/m/d H:i" }}</td>
+                        <td>{{ activity.label }}</td>
+                        <td class="management-muted">{{ activity.detail }}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="3" class="management-muted">表示できる動きはまだありません。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+
+    <section class="management-card">
+        <div class="management-card-header"><h2>データの注意点</h2></div>
+        <div style="padding: 16px 18px;">
+            {% for note in data_notes %}
+                <p class="management-muted" style="margin: 0 0 8px;">{{ note }}</p>
+            {% endfor %}
+        </div>
+    </section>
+</div>
+{% endblock %}

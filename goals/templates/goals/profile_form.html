@@ -1,6 +1,6 @@
 {% extends "goals/base.html" %}
 
-{% block title %}プロフィール編集 - 叶えたいことリスト{% endblock %}
+{% block title %}プロフィール編集 - Wishly{% endblock %}
 
 {% block content %}
 <style>
@@ -11,30 +11,40 @@
         gap: 12px;
         margin-bottom: 16px;
     }
+
     .profile-form-title h2 {
         margin: 0;
+        color: #37352f;
+        font-size: clamp(22px, 5vw, 30px);
+        line-height: 1.2;
     }
+
     .profile-form-actions {
         display: flex;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         gap: 8px;
         justify-content: flex-end;
     }
+
     .profile-form-actions .button {
         white-space: nowrap;
     }
+
     .profile-icon-editor {
         display: grid;
         justify-items: center;
         gap: 12px;
         text-align: center;
     }
+
     .profile-icon-preview {
         width: 132px;
         height: 132px;
-        border: 4px solid #fffaf1;
-        box-shadow: 0 8px 18px rgba(83, 62, 36, 0.13);
+        border: 1px solid #e5e5e5;
+        box-shadow: none;
+        background: #f7f7f5;
     }
+
     .profile-icon-controls {
         display: flex;
         flex-wrap: wrap;
@@ -42,18 +52,53 @@
         align-items: center;
         justify-content: center;
     }
+
+    .app-check-row {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: #37352f;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .app-check-row input {
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        flex: 0 0 auto;
+    }
+
+    .private-help-text {
+        margin: 8px 0 0;
+        color: #787774;
+        font-size: 13px;
+        line-height: 1.6;
+    }
+
+    .profile-char-counter {
+        margin: 7px 0 0;
+        color: var(--app-muted, #787774);
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.4;
+        text-align: right;
+    }
+
     .crop-modal {
         position: fixed;
         inset: 0;
         z-index: 100;
         display: none;
-        background: #111111;
-        color: #fffdf8;
+        background: #111;
+        color: #fff;
     }
+
     .crop-modal.is-open {
         display: grid;
         grid-template-rows: auto minmax(0, 1fr) auto;
     }
+
     .crop-topbar {
         display: grid;
         grid-template-columns: auto minmax(0, 1fr) auto;
@@ -62,20 +107,23 @@
         padding: calc(env(safe-area-inset-top, 0px) + 14px) 16px 12px;
         border-bottom: 1px solid rgba(255, 255, 255, 0.16);
     }
+
     .crop-topbar h3 {
         margin: 0;
         text-align: center;
         font-size: 16px;
     }
+
     .crop-topbar button {
         border: 0;
         background: transparent;
-        color: #fffdf8;
+        color: #fff;
         font: inherit;
-        font-weight: 800;
+        font-weight: 700;
         cursor: pointer;
         white-space: nowrap;
     }
+
     .crop-stage {
         position: relative;
         display: grid;
@@ -84,6 +132,7 @@
         min-height: 320px;
         touch-action: none;
     }
+
     .crop-stage::before {
         content: "";
         position: absolute;
@@ -95,31 +144,35 @@
         pointer-events: none;
         z-index: 2;
     }
+
     #crop-canvas {
         width: min(92vw, 420px);
         height: min(92vw, 420px);
         max-height: 62vh;
         touch-action: none;
     }
+
     .crop-hint {
+        margin: 0;
         padding: 12px 18px calc(env(safe-area-inset-bottom, 0px) + 16px);
         background: rgba(0, 0, 0, 0.52);
-        color: rgba(255, 253, 248, 0.82);
+        color: rgba(255, 255, 255, 0.82);
         font-size: 13px;
         font-weight: 700;
         text-align: center;
     }
+
     @media (max-width: 768px) {
         .profile-form-title {
             grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
         }
-        .profile-form-actions {
-            flex-wrap: nowrap;
-        }
+
         .profile-form-actions .button {
-            padding-left: 10px;
-            padding-right: 10px;
+            padding: 8px 10px;
+            font-size: 13px;
         }
+
         .profile-icon-preview {
             width: 120px;
             height: 120px;
@@ -127,20 +180,27 @@
     }
 </style>
 
-<div class="page-title profile-form-title">
-    <h2>プロフィール編集</h2>
-    <div class="profile-form-actions">
-        <button class="button pill-button" type="submit" form="profile-form">保存</button>
-        <a class="button pill-button" href="{% url 'goals:my_profile' %}">キャンセル</a>
-    </div>
-</div>
+{% url 'goals:my_profile' as profile_cancel_url %}
+{% include "goals/partials/app_form_header.html" with header_title="プロフィール編集" back_url=profile_cancel_url back_label="← マイページへ戻る" cancel_url=profile_cancel_url save_form_id="profile-form" %}
 
-<form id="profile-form" class="app-form-card" method="post" enctype="multipart/form-data">
+<form id="profile-form" class="app-form-card" method="post" enctype="multipart/form-data" novalidate>
     {% csrf_token %}
-    {{ form.non_field_errors }}
+    {% if form.errors %}
+        <div class="form-error-alert" role="alert">
+            <strong>入力内容を確認してください。</strong>
+            {% if form.non_field_errors %}
+                <ul>
+                    {% for error in form.non_field_errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+    {% endif %}
+
     {{ form.avatar_crop_data }}
 
-    <section class="app-field">
+    <section class="app-field{% if form.icon.errors %} has-error{% endif %}">
         <span class="app-label">プロフィール画像</span>
         <div class="profile-icon-editor">
             <span class="avatar large profile-icon-preview" id="profile-icon-preview">
@@ -172,21 +232,33 @@
         {% endfor %}
     </section>
 
-    <section class="app-field">
+    <section class="app-field{% if form.display_name.errors %} has-error{% endif %}">
         <label class="app-label" for="{{ form.display_name.id_for_label }}">表示名</label>
         {{ form.display_name }}
+        <p class="app-help">15文字以内。絵文字も使用できます。</p>
         {% for error in form.display_name.errors %}
             <p class="app-error">{{ error }}</p>
         {% endfor %}
     </section>
 
-    <section class="app-field">
+    <section class="app-field{% if form.username.errors %} has-error{% endif %}">
+        <label class="app-label" for="{{ form.username.id_for_label }}">ユーザーネーム</label>
+        {{ form.username }}
+        <p class="app-help">15文字以内の半角英数字と _ が使用できます。アルファベットを1文字以上含めてください。</p>
+        {% for error in form.username.errors %}
+            <p class="app-error">{{ error }}</p>
+        {% endfor %}
+    </section>
+
+    <section class="app-field{% if form.bio.errors %} has-error{% endif %}">
         <label class="app-label" for="{{ form.bio.id_for_label }}">自己紹介</label>
         {{ form.bio }}
+        <p class="profile-char-counter" id="profile-bio-counter" data-max-length="150">0 / 150文字</p>
         {% for error in form.bio.errors %}
             <p class="app-error">{{ error }}</p>
         {% endfor %}
     </section>
+
 </form>
 
 <div class="crop-modal" id="crop-modal" aria-hidden="true">
@@ -198,10 +270,23 @@
     <div class="crop-stage" id="crop-stage">
         <canvas id="crop-canvas" width="720" height="720"></canvas>
     </div>
-    <p class="crop-hint">ドラッグで位置調整、ピンチまたはホイールで拡大縮小できます</p>
+    <p class="crop-hint">ドラッグで位置調整、ピンチまたはホイールで拡大縮小できます。</p>
 </div>
 
 <script>
+    (() => {
+        const bioInput = document.getElementById("{{ form.bio.id_for_label }}");
+        const counter = document.getElementById("profile-bio-counter");
+        if (!bioInput || !counter) return;
+        const maxLength = Number(counter.dataset.maxLength || bioInput.getAttribute("maxlength") || 150);
+        const updateCounter = () => {
+            const count = bioInput.value.length;
+            counter.textContent = `${count} / ${maxLength}文字`;
+        };
+        bioInput.addEventListener("input", updateCounter);
+        updateCounter();
+    })();
+
     (() => {
         const fileInput = document.getElementById("{{ form.icon.id_for_label }}");
         const cropInput = document.getElementById("{{ form.avatar_crop_data.id_for_label }}");
@@ -265,6 +350,12 @@
                 modal.classList.add("is-open");
                 modal.setAttribute("aria-hidden", "false");
             };
+            image.onerror = () => {
+                image = null;
+                cropInput.value = "";
+                modal.classList.remove("is-open");
+                modal.setAttribute("aria-hidden", "true");
+            };
             image.src = src;
         }
 
@@ -292,6 +383,7 @@
                 drag = null;
             }
         });
+
         stage.addEventListener("pointermove", (event) => {
             if (!image || !pointers.has(event.pointerId)) return;
             pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -309,6 +401,7 @@
                 drawCrop();
             }
         });
+
         function endPointer(event) {
             pointers.delete(event.pointerId);
             drag = null;
@@ -318,6 +411,7 @@
                 drag = { x: point.x, y: point.y, startX: position.x, startY: position.y };
             }
         }
+
         stage.addEventListener("pointerup", endPointer);
         stage.addEventListener("pointercancel", endPointer);
         stage.addEventListener("wheel", (event) => {

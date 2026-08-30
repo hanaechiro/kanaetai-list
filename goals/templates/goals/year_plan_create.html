@@ -1,0 +1,323 @@
+{% extends "goals/base.html" %}
+
+{% block title %}{{ title|default:"マイリスト設定" }} - Wishly{% endblock %}
+
+{% block content %}
+<style>
+    .list-setting-page { display: grid; gap: 12px; max-width: 560px; margin: 0 auto; padding-bottom: calc(120px + env(safe-area-inset-bottom)); }
+    .list-setting-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+    .list-setting-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; white-space: nowrap; }
+    .list-setting-actions .button { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; padding: 0 16px; border-radius: 999px; font-size: 14px; font-weight: 800; line-height: 1; box-sizing: border-box; }
+    .list-setting-page .app-form-header { margin-bottom: 2px !important; padding-bottom: 20px; border-bottom: 1px solid var(--app-border, #e5e5e5); }
+    .list-setting-page .app-form-header-main { gap: 7px; }
+    .list-setting-card { display: grid; gap: 11px; border: 1px solid var(--app-border, #e5e5e5); border-radius: 22px; background: #fff; padding: 14px; box-shadow: 0 1px 2px rgba(15, 15, 15, 0.03); }
+    .create-field { display: grid; gap: 5px; min-width: 0; }
+    .create-field > label, .create-field-title { color: var(--app-text, #37352f); font-size: 13px; font-weight: 800; }
+    .create-field input[type="text"], .create-field input[type="number"], .create-field select, .create-field textarea { width: 100%; max-width: 100%; box-sizing: border-box; border: 1px solid var(--app-border, #e5e5e5); border-radius: 12px; background: #fff; padding: 10px 12px; color: var(--app-text, #37352f); font-size: 16px; }
+    .create-field textarea { min-height: 84px; resize: vertical; }
+    .field-char-counter { margin: 2px 0 0; color: var(--app-muted, #787774); font-size: 12px; font-weight: 600; line-height: 1.4; text-align: right; }
+    .field-char-counter.is-over-limit,
+    .field-limit-error { color: #d92d20; }
+    .field-limit-error { display: none; margin: 2px 0 0; font-size: 12px; font-weight: 600; line-height: 1.4; }
+    .field-limit-error.is-visible { display: block; }
+    .create-field.is-over-limit input[type="text"],
+    .create-field.is-over-limit textarea { border-color: #d92d20; }
+    .create-checkbox { display: inline-flex; align-items: center; gap: 9px; width: fit-content; color: var(--app-text, #37352f); font-size: 14px; font-weight: 700; cursor: pointer; }
+    .create-checkbox input { width: 18px; height: 18px; margin: 0; }
+    .create-collaborators { display: none; }
+    .create-collaborators.is-visible { display: grid; }
+    .collaborator-select { display: none; }
+    .collaborator-picker-trigger { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 48px; border: 1px solid var(--app-border, #e5e5e5); border-radius: 14px; background: #fff; padding: 10px 12px; color: var(--app-text, #37352f); text-align: left; cursor: pointer; }
+    .collaborator-picker-trigger strong { font-size: 14px; line-height: 1.35; }
+    .collaborator-picker-trigger span { color: var(--app-muted, #787774); font-size: 12px; line-height: 1.35; }
+    .collaborator-summary { display: flex; flex-wrap: wrap; gap: 7px; min-height: 0; }
+    .collaborator-summary-chip { display: inline-flex; align-items: center; min-height: 28px; border: 1px solid var(--app-border, #e5e5e5); border-radius: 999px; background: #f7f7f5; padding: 0 10px; color: var(--app-text, #37352f); font-size: 12px; font-weight: 650; }
+    .collab-sheet-overlay { position: fixed; inset: 0; z-index: 1200; display: none; align-items: flex-end; justify-content: center; background: rgba(15, 15, 15, 0.32); padding: 18px 14px calc(18px + env(safe-area-inset-bottom)); }
+    .collab-sheet-overlay.is-open { display: flex; }
+    body.collab-sheet-open { overflow: hidden; }
+    .collab-sheet { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; width: min(520px, 100%); max-height: min(680px, 88dvh); border-radius: 24px; background: #fff; box-shadow: 0 24px 64px rgba(15, 15, 15, 0.22); overflow: hidden; }
+    .collab-sheet-head { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; min-height: 54px; border-bottom: 1px solid var(--app-border, #e5e5e5); padding: 0 8px; }
+    .collab-sheet-close { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 0; border-radius: 999px; background: transparent; color: var(--app-text, #37352f); font-size: 24px; line-height: 1; cursor: pointer; }
+    .collab-sheet-title { margin: 0; color: var(--app-text, #37352f); font-size: 15px; font-weight: 750; line-height: 1.3; text-align: center; }
+    .collab-search-wrap { padding: 10px 14px; border-bottom: 1px solid var(--app-border, #e5e5e5); }
+    .collab-search { width: 100%; min-height: 40px; border: 1px solid var(--app-border, #e5e5e5); border-radius: 12px; background: #f7f7f5; padding: 0 12px; box-sizing: border-box; font-size: 15px; }
+    .collab-user-list { display: grid; align-content: start; gap: 0; min-height: 220px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .collab-user-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) 30px; align-items: center; gap: 11px; width: 100%; border: 0; border-bottom: 1px solid var(--app-border, #e5e5e5); background: #fff; padding: 10px 14px; color: var(--app-text, #37352f); text-align: left; cursor: pointer; }
+    .collab-avatar { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--app-border, #e5e5e5); border-radius: 50%; background: #f7f7f5; color: var(--app-text, #37352f); font-size: 15px; font-weight: 750; overflow: hidden; }
+    .collab-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .collab-user-name { display: grid; gap: 2px; min-width: 0; }
+    .collab-user-name strong, .collab-user-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .collab-user-name strong { font-size: 14px; font-weight: 700; }
+    .collab-user-name span { color: var(--app-muted, #787774); font-size: 12px; }
+    .collab-check { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1.5px solid var(--app-border-strong, #d8d8d8); border-radius: 50%; color: #fff; font-size: 14px; font-weight: 800; }
+    .collab-user-row.is-selected .collab-check { border-color: var(--app-text, #37352f); background: var(--app-text, #37352f); }
+    .collab-sheet-empty { margin: 18px 14px; color: var(--app-muted, #787774); font-size: 13px; }
+    .collab-sheet-foot { display: grid; gap: 8px; padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--app-border, #e5e5e5); background: #fff; }
+    .collab-selected-count { color: var(--app-muted, #787774); font-size: 12px; text-align: center; }
+    .collab-done-button { width: 100%; min-height: 44px; border: 0; border-radius: 999px; background: var(--app-text, #37352f); color: #fff; font-size: 14px; font-weight: 750; cursor: pointer; }
+    @media (max-width: 768px) {
+        .list-setting-page { max-width: none; gap: 11px; }
+        .list-setting-top { grid-template-columns: minmax(0, 1fr) auto; }
+        .list-setting-actions .button { min-height: 38px; padding-inline: 13px; }
+        .list-setting-card { padding: 13px; }
+        .collab-sheet-overlay { padding-inline: 0; padding-bottom: 0; }
+        .collab-sheet { width: 100%; max-height: 86dvh; border-radius: 24px 24px 0 0; }
+    }
+</style>
+
+    <div class="list-setting-page">
+    {% if object %}
+        {% include "goals/partials/app_form_header.html" with header_title=title header_description="リスト名、説明、公開設定を整えます。" back_url=cancel_url back_label="← リスト詳細へ戻る" cancel_url=cancel_url save_form_id="year-plan-form" %}
+    {% else %}
+        {% include "goals/partials/app_form_header.html" with header_title=title header_description="リスト名、説明、公開設定を整えます。" back_url=cancel_url back_label="← マイリストへ戻る" cancel_url=cancel_url save_form_id="year-plan-form" %}
+    {% endif %}
+
+    <form id="year-plan-form" class="list-setting-card" method="post" novalidate>
+        {% csrf_token %}
+        {% if form.errors %}
+            <div class="form-error-alert" role="alert">
+                <strong>入力内容を確認してください。</strong>
+                {% if form.non_field_errors %}
+                    <ul>{% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                {% endif %}
+            </div>
+        {% endif %}
+
+        <div class="create-field{% if form.list_title.errors %} has-error{% endif %}">
+            {{ form.list_title.label_tag }}
+            {{ form.list_title }}
+            <p class="field-char-counter" id="year-plan-title-counter" data-max-length="30">0 / 30文字</p>
+            <p class="field-limit-error" id="year-plan-title-limit-error">リスト名は30文字以内で入力してください。</p>
+            {% for error in form.list_title.errors %}<p class="field-error-bubble">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="create-field{% if form.description.errors %} has-error{% endif %}">
+            {{ form.description.label_tag }}
+            {{ form.description }}
+            <p class="field-char-counter" id="year-plan-description-counter" data-max-length="50">0 / 50文字</p>
+            <p class="field-limit-error" id="year-plan-description-limit-error">説明は50文字以内で入力してください。</p>
+            {% for error in form.description.errors %}<p class="field-error-bubble">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="create-field{% if form.target_count.errors %} has-error{% endif %}">
+            {{ form.target_count.label_tag }}
+            {{ form.target_count }}
+            {% for error in form.target_count.errors %}<p class="field-error-bubble">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="create-field{% if form.is_public.errors %} has-error{% endif %}">
+            <label class="create-checkbox" for="{{ form.is_public.id_for_label }}">
+                {{ form.is_public }}
+                <span>このリストを公開する</span>
+            </label>
+            {% for error in form.is_public.errors %}<p class="field-error-bubble">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="create-field{% if form.is_collaborative.errors %} has-error{% endif %}">
+            <label class="create-checkbox" for="{{ form.is_collaborative.id_for_label }}">
+                {{ form.is_collaborative }}
+                <span>共同リストにする</span>
+            </label>
+            {% for error in form.is_collaborative.errors %}<p class="field-error-bubble">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="create-field create-collaborators{% if form.collaborators.errors %} has-error{% endif %}" data-create-collaborators>
+            {{ form.collaborators.label_tag }}
+            {{ form.collaborators }}
+            <button class="collaborator-picker-trigger" type="button" data-open-collab-sheet>
+                <span>
+                    <strong>共同編集メンバーを選択</strong>
+                    <span data-collab-trigger-summary>選択されていません</span>
+                </span>
+                <span aria-hidden="true">›</span>
+            </button>
+            <div class="collaborator-summary" data-collab-summary></div>
+            <span class="field-help-text">{{ form.collaborators.help_text }}</span>
+            {% for error in form.collaborators.errors %}<p class="field-error-bubble">{{ error }}</p>{% endfor %}
+        </div>
+    </form>
+</div>
+
+<script>
+    (() => {
+        const fields = [
+            {
+                input: document.getElementById("{{ form.list_title.id_for_label }}"),
+                counter: document.getElementById("year-plan-title-counter"),
+                error: document.getElementById("year-plan-title-limit-error"),
+            },
+            {
+                input: document.getElementById("{{ form.description.id_for_label }}"),
+                counter: document.getElementById("year-plan-description-counter"),
+                error: document.getElementById("year-plan-description-limit-error"),
+            },
+        ].filter((field) => field.input && field.counter);
+        const saveButton = document.querySelector('[type="submit"][form="year-plan-form"]');
+        const updateCounters = () => {
+            let hasError = false;
+            fields.forEach(({ input, counter, error }) => {
+                const maxLength = Number(counter.dataset.maxLength || 0);
+                const count = input.value.length;
+                const overLimit = maxLength > 0 && count > maxLength;
+                const field = input.closest(".create-field");
+                counter.textContent = `${count} / ${maxLength}文字`;
+                counter.classList.toggle("is-over-limit", overLimit);
+                input.setAttribute("aria-invalid", overLimit ? "true" : "false");
+                field?.classList.toggle("is-over-limit", overLimit);
+                error?.classList.toggle("is-visible", overLimit);
+                hasError = hasError || overLimit;
+            });
+            if (saveButton) saveButton.disabled = hasError;
+        };
+        fields.forEach(({ input }) => input.addEventListener("input", updateCounters));
+        updateCounters();
+    })();
+</script>
+
+<div class="collab-sheet-overlay" data-collab-sheet aria-hidden="true">
+    <section class="collab-sheet" role="dialog" aria-modal="true" aria-labelledby="collab-sheet-title">
+        <header class="collab-sheet-head">
+            <button class="collab-sheet-close" type="button" data-close-collab-sheet aria-label="閉じる">×</button>
+            <h3 id="collab-sheet-title" class="collab-sheet-title">共同編集メンバーを選択</h3>
+            <span></span>
+        </header>
+        <div class="collab-search-wrap">
+            <input class="collab-search" type="search" placeholder="名前またはユーザー名で検索" data-collab-search>
+        </div>
+        <div class="collab-user-list" data-collab-list></div>
+        <footer class="collab-sheet-foot">
+            <span class="collab-selected-count" data-collab-count>0人選択中</span>
+            <button class="collab-done-button" type="button" data-apply-collab-sheet>完了</button>
+        </footer>
+    </section>
+</div>
+
+<script>
+    const collaborativeToggle = document.getElementById("id_is_collaborative");
+    const collaboratorsField = document.querySelector("[data-create-collaborators]");
+    const collaboratorSelect = document.querySelector("[data-collaborator-select]");
+    const collabSheet = document.querySelector("[data-collab-sheet]");
+    const collabList = document.querySelector("[data-collab-list]");
+    const collabSearch = document.querySelector("[data-collab-search]");
+    const collabCount = document.querySelector("[data-collab-count]");
+    const collabSummary = document.querySelector("[data-collab-summary]");
+    const collabTriggerSummary = document.querySelector("[data-collab-trigger-summary]");
+    let draftCollaborators = new Set();
+
+    const toggleCollaborators = () => {
+        if (!collaborativeToggle || !collaboratorsField) return;
+        collaboratorsField.classList.toggle("is-visible", collaborativeToggle.checked);
+        if (!collaborativeToggle.checked && collaboratorSelect) {
+            Array.from(collaboratorSelect.options).forEach((option) => { option.selected = false; });
+            renderCommittedCollaborators();
+        }
+    };
+    collaborativeToggle?.addEventListener("change", toggleCollaborators);
+    toggleCollaborators();
+
+    const collaboratorOptions = collaboratorSelect
+        ? Array.from(collaboratorSelect.options).map((option) => ({
+            option,
+            id: option.value,
+            displayName: option.dataset.displayName || option.textContent.trim(),
+            username: option.dataset.username || "",
+            avatar: option.dataset.avatar || "",
+            initial: option.dataset.initial || (option.textContent.trim().charAt(0) || "?"),
+            keyword: `${option.dataset.displayName || option.textContent} ${option.dataset.username || ""}`.toLowerCase(),
+        }))
+        : [];
+
+    function selectedCollaborators() {
+        return collaboratorOptions.filter((item) => item.option.selected);
+    }
+
+    function renderCommittedCollaborators() {
+        const selected = selectedCollaborators();
+        if (collabTriggerSummary) {
+            collabTriggerSummary.textContent = selected.length ? `${selected.length}人選択中` : "選択されていません";
+        }
+        if (!collabSummary) return;
+        collabSummary.innerHTML = "";
+        selected.forEach((item) => {
+            const chip = document.createElement("span");
+            chip.className = "collaborator-summary-chip";
+            chip.textContent = item.displayName;
+            collabSummary.appendChild(chip);
+        });
+    }
+
+    function renderCollabList() {
+        if (!collabList) return;
+        const query = (collabSearch?.value || "").trim().toLowerCase();
+        const matches = collaboratorOptions.filter((item) => !query || item.keyword.includes(query));
+        collabList.innerHTML = "";
+        if (!matches.length) {
+            const empty = document.createElement("p");
+            empty.className = "collab-sheet-empty";
+            empty.textContent = "候補が見つかりません。";
+            collabList.appendChild(empty);
+            return;
+        }
+        matches.forEach((item) => {
+            const row = document.createElement("button");
+            row.type = "button";
+            row.className = `collab-user-row${draftCollaborators.has(item.id) ? " is-selected" : ""}`;
+            row.innerHTML = `
+                <span class="collab-avatar">${item.avatar ? `<img src="${item.avatar}" alt="">` : item.initial}</span>
+                <span class="collab-user-name">
+                    <strong>${item.displayName}</strong>
+                    <span>${item.username ? "@" + item.username : ""}</span>
+                </span>
+                <span class="collab-check">${draftCollaborators.has(item.id) ? "✓" : ""}</span>
+            `;
+            row.addEventListener("click", () => {
+                if (draftCollaborators.has(item.id)) {
+                    draftCollaborators.delete(item.id);
+                } else {
+                    draftCollaborators.add(item.id);
+                }
+                renderCollabList();
+                updateDraftCount();
+            });
+            collabList.appendChild(row);
+        });
+    }
+
+    function updateDraftCount() {
+        if (collabCount) collabCount.textContent = `${draftCollaborators.size}人選択中`;
+    }
+
+    function openCollabSheet() {
+        draftCollaborators = new Set(selectedCollaborators().map((item) => item.id));
+        collabSearch.value = "";
+        collabSheet?.classList.add("is-open");
+        collabSheet?.setAttribute("aria-hidden", "false");
+        document.body.classList.add("collab-sheet-open");
+        updateDraftCount();
+        renderCollabList();
+        setTimeout(() => collabSearch?.focus(), 30);
+    }
+
+    function closeCollabSheet() {
+        collabSheet?.classList.remove("is-open");
+        collabSheet?.setAttribute("aria-hidden", "true");
+        document.body.classList.remove("collab-sheet-open");
+    }
+
+    document.querySelector("[data-open-collab-sheet]")?.addEventListener("click", openCollabSheet);
+    document.querySelector("[data-close-collab-sheet]")?.addEventListener("click", closeCollabSheet);
+    document.querySelector("[data-apply-collab-sheet]")?.addEventListener("click", () => {
+        collaboratorOptions.forEach((item) => { item.option.selected = draftCollaborators.has(item.id); });
+        renderCommittedCollaborators();
+        closeCollabSheet();
+    });
+    collabSheet?.addEventListener("click", (event) => {
+        if (event.target === collabSheet) closeCollabSheet();
+    });
+    collabSearch?.addEventListener("input", renderCollabList);
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && collabSheet?.classList.contains("is-open")) closeCollabSheet();
+    });
+    renderCommittedCollaborators();
+</script>
+{% endblock %}

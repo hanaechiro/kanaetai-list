@@ -1,0 +1,325 @@
+{% extends "goals/base.html" %}
+
+{% block title %}アカウント設定 - Wishly{% endblock %}
+
+{% block content %}
+<style>
+    .account-settings-page {
+        display: grid;
+        gap: 18px;
+        max-width: 640px;
+        margin: 0 auto;
+        padding-bottom: calc(120px + env(safe-area-inset-bottom));
+    }
+    .settings-section {
+        display: grid;
+        gap: 8px;
+    }
+    .settings-section-title {
+        margin: 0;
+        color: var(--app-muted, #787774);
+        font-size: 13px;
+        font-weight: 650;
+        line-height: 1.4;
+    }
+    .settings-list {
+        overflow: hidden;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: var(--ui-card-radius, 12px);
+        background: #fff;
+        box-shadow: var(--app-shadow, 0 1px 2px rgba(15, 15, 15, 0.03));
+    }
+    .settings-row,
+    .settings-action-row,
+    .settings-toggle-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        min-height: 56px;
+        padding: 10px 15px;
+        border: 0;
+        background: #fff;
+        color: var(--app-text, #37352f);
+        font: inherit;
+        text-align: left;
+        text-decoration: none;
+        box-sizing: border-box;
+    }
+    .settings-row + .settings-row,
+    .settings-row + .settings-action-row,
+    .settings-action-row + .settings-row,
+    .settings-toggle-row + .settings-row,
+    .settings-inline-form + .settings-row {
+        border-top: 1px solid var(--app-border, #e5e5e5);
+    }
+    .settings-row:hover,
+    .settings-row:focus,
+    .settings-action-row:hover,
+    .settings-action-row:focus {
+        background: #f7f7f5;
+        text-decoration: none;
+    }
+    .settings-row-main {
+        display: grid;
+        gap: 3px;
+        min-width: 0;
+    }
+    .settings-row-title {
+        color: var(--app-text, #37352f);
+        font-size: var(--ui-body-size, 15px);
+        font-weight: 600;
+        line-height: 1.35;
+    }
+    .settings-row-meta,
+    .settings-row-description {
+        color: var(--app-muted, #787774);
+        font-size: var(--ui-caption-size, 13px);
+        font-weight: 500;
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+    }
+    .settings-row-link,
+    .settings-row-arrow {
+        color: var(--app-muted, #787774);
+        font-size: 13px;
+        font-weight: 650;
+        white-space: nowrap;
+    }
+    .settings-row-arrow {
+        font-size: 21px;
+        line-height: 1;
+    }
+    .settings-warning {
+        display: grid;
+        gap: 8px;
+        padding: 12px 15px;
+        border-top: 1px solid var(--app-border, #e5e5e5);
+        color: #9b3d35;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+    .settings-warning p {
+        margin: 0;
+    }
+    .settings-inline-form,
+    .settings-action-row {
+        margin: 0;
+    }
+    .settings-text-button {
+        justify-self: start;
+        min-height: 34px;
+        padding: 0 12px;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: var(--ui-button-radius, 999px);
+        background: #fff;
+        color: var(--app-text, #37352f);
+        font-size: 13px;
+        font-weight: 650;
+        cursor: pointer;
+    }
+    .settings-action-row {
+        cursor: pointer;
+    }
+    .settings-action-row.is-danger .settings-row-title,
+    .settings-row.is-danger .settings-row-title {
+        color: var(--app-danger, #9b3d35);
+    }
+    .settings-switch {
+        position: relative;
+        display: inline-flex;
+        width: 48px;
+        height: 28px;
+        flex: 0 0 auto;
+    }
+    .settings-switch input {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        cursor: pointer;
+    }
+    .settings-switch-track {
+        position: absolute;
+        inset: 0;
+        border-radius: 999px;
+        background: #d8d8d4;
+        transition: background 0.18s ease;
+    }
+    .settings-switch-track::after {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 1px 4px rgba(15, 15, 15, 0.18);
+        transition: transform 0.18s ease;
+    }
+    .settings-switch input:checked + .settings-switch-track {
+        background: #37352f;
+    }
+    .settings-switch input:checked + .settings-switch-track::after {
+        transform: translateX(20px);
+    }
+    .settings-save-state {
+        min-height: 0;
+        padding: 0 15px 12px;
+        color: var(--app-muted, #787774);
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1.4;
+    }
+    .settings-save-state:not(:empty) {
+        margin-top: -2px;
+    }
+    .settings-save-state.is-success {
+        color: #027a48;
+    }
+    .settings-save-state.is-error {
+        color: var(--app-danger, #9b3d35);
+    }
+    @media (max-width: 768px) {
+        .account-settings-page {
+            max-width: none;
+        }
+        .settings-row,
+        .settings-action-row,
+        .settings-toggle-row {
+            min-height: 54px;
+            padding-inline: 14px;
+        }
+    }
+</style>
+
+<div class="account-settings-page">
+    {% url 'goals:my_profile' as my_profile_url %}
+    {% include "goals/partials/app_form_header.html" with header_title="アカウント設定" back_url=my_profile_url back_label="← マイページへ戻る" %}
+
+    <section class="settings-section" aria-labelledby="account-section-title">
+        <h3 id="account-section-title" class="settings-section-title">アカウント</h3>
+        <div class="settings-list">
+            <a class="settings-row" href="{% url 'goals:account_email_change' %}">
+                <span class="settings-row-main">
+                    <span class="settings-row-title">メールアドレス</span>
+                    <span class="settings-row-meta">{{ request.user.email|default:"未設定" }}</span>
+                </span>
+                <span class="settings-row-link">変更する</span>
+            </a>
+            {% if request.user.email and not profile.email_verified %}
+                <div class="settings-warning">
+                    <p>メールアドレスがまだ確認されていません</p>
+                    <form class="settings-inline-form" method="post" action="{% url 'goals:resend_verification_email' %}">
+                        {% csrf_token %}
+                        <button class="settings-text-button" type="submit">認証メールを再送する</button>
+                    </form>
+                </div>
+            {% endif %}
+            <a class="settings-row" href="{% url 'password_change' %}">
+                <span class="settings-row-title">パスワード</span>
+                <span class="settings-row-link">パスワードを変更</span>
+            </a>
+        </div>
+    </section>
+
+    <section class="settings-section" aria-labelledby="privacy-section-title">
+        <h3 id="privacy-section-title" class="settings-section-title">プライバシー</h3>
+        <div class="settings-list">
+            <form class="settings-toggle-form" method="post" data-privacy-toggle-form>
+                {% csrf_token %}
+                <label class="settings-toggle-row" for="{{ privacy_form.is_private.id_for_label }}">
+                    <span class="settings-row-main">
+                        <span class="settings-row-title">非公開アカウント</span>
+                        <span class="settings-row-description">ONにすると、承認したフォロワーだけがあなたのリストを見ることができます。</span>
+                    </span>
+                    <span class="settings-switch">
+                        {{ privacy_form.is_private }}
+                        <span class="settings-switch-track" aria-hidden="true"></span>
+                    </span>
+                </label>
+                <div class="settings-save-state" data-privacy-save-state aria-live="polite"></div>
+            </form>
+        </div>
+    </section>
+
+    <section class="settings-section" aria-labelledby="other-section-title">
+        <h3 id="other-section-title" class="settings-section-title">その他</h3>
+        <div class="settings-list">
+            <form class="settings-inline-form" method="post" action="{% url 'logout' %}" data-logout-form>
+                {% csrf_token %}
+                <button class="settings-action-row" type="submit">
+                    <span class="settings-row-title">ログアウト</span>
+                </button>
+            </form>
+            <a class="settings-row is-danger" href="{% url 'goals:account_delete' %}">
+                <span class="settings-row-title">アカウントを削除</span>
+                <span class="settings-row-arrow" aria-hidden="true">&gt;</span>
+            </a>
+        </div>
+    </section>
+</div>
+
+<script>
+    (() => {
+        const form = document.querySelector("[data-privacy-toggle-form]");
+        if (!form) return;
+        const checkbox = form.querySelector("input[type='checkbox']");
+        const state = form.querySelector("[data-privacy-save-state]");
+        const savingMessage = "保存中...";
+        const successMessage = "✓ 保存しました";
+        const errorMessage = "保存に失敗しました";
+        let previous = checkbox?.checked;
+        let controller = null;
+
+        checkbox?.addEventListener("change", async () => {
+            if (!checkbox) return;
+            const payload = new FormData(form);
+            checkbox.disabled = true;
+            state.textContent = "保存中...";
+            state.classList.remove("is-error");
+            state.classList.remove("is-success");
+            state.textContent = savingMessage;
+            controller?.abort();
+            controller = new AbortController();
+            try {
+                const response = await fetch(form.action || window.location.href, {
+                    method: "POST",
+                    body: payload,
+                    headers: {"X-Requested-With": "XMLHttpRequest"},
+                    signal: controller.signal,
+                });
+                if (!response.ok) throw new Error("save failed");
+                const data = await response.json();
+                previous = Boolean(data.is_private);
+                checkbox.checked = previous;
+                window.setTimeout(() => {
+                    state.textContent = successMessage;
+                    state.classList.add("is-success");
+                    window.setTimeout(() => {
+                        if (state.textContent === successMessage) {
+                            state.textContent = "";
+                            state.classList.remove("is-success");
+                        }
+                    }, 1600);
+                }, 0);
+                state.textContent = "保存しました";
+                window.setTimeout(() => {
+                    if (state.textContent === "保存しました") state.textContent = "";
+                }, 1600);
+            } catch (error) {
+                if (error.name !== "AbortError") {
+                    checkbox.checked = previous;
+                    state.textContent = "保存できませんでした";
+                    state.classList.add("is-error");
+                    state.classList.remove("is-success");
+                    state.textContent = errorMessage;
+                }
+            } finally {
+                checkbox.disabled = false;
+            }
+        });
+    })();
+</script>
+{% endblock %}

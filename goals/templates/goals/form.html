@@ -1,6 +1,6 @@
 {% extends "goals/base.html" %}
 
-{% block title %}{{ title }} - 叶えたいことリスト{% endblock %}
+{% block title %}{{ title }} - Wishly{% endblock %}
 
 {% block content %}
 <style>
@@ -26,59 +26,389 @@
     .form-box input,
     .form-box select,
     .form-box textarea {
+        width: 100%;
+        min-width: 0;
         box-sizing: border-box;
         max-width: 100%;
+        min-height: 44px;
+        padding: 10px 12px;
+        border: 1px solid var(--app-border-strong, #d8d8d8);
+        border-radius: var(--app-radius-sm, 10px);
+        background: #fff;
+        color: var(--app-text, #37352f);
+        font: inherit;
+        font-size: 16px;
+        line-height: 1.4;
     }
     .form-box input[type="date"] {
         width: 100%;
         min-width: 0;
     }
-    .form-box p {
-        min-width: 0;
+    .form-box .actions {
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 22px;
     }
-    .form-box p:has(input[type="checkbox"]) {
-        display: flex;
+    .hidden-completion-date,
+    .collaborator-field.is-hidden {
+        display: none;
+    }
+    .collaborator-select {
+        display: none;
+    }
+    .collaborator-picker {
+        display: grid;
+        gap: 16px;
+        padding: 12px;
+        border: 1px solid var(--border-color, #e5e5e5);
+        border-radius: 14px;
+        background: #fff;
+    }
+    .collaborator-picker-title,
+    .collaborator-section-title {
+        margin: 0;
+        color: var(--text-color, #37352f);
+        font-size: 14px;
+        font-weight: 700;
+    }
+    .collaborator-search {
+        width: 100%;
+    }
+    .collaborator-section {
+        display: grid;
+        gap: 8px;
+    }
+    .collaborator-results {
+        display: grid;
+        gap: 8px;
+    }
+    .collaborator-result {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
         align-items: center;
         gap: 10px;
+        width: 100%;
+        border: 1px solid var(--border-color, #e5e5e5);
+        border-radius: 12px;
+        background: #fff;
+        color: var(--text-color, #37352f);
+        padding: 10px;
+        text-align: left;
+        cursor: pointer;
     }
-    .form-box p:has(input[type="checkbox"]) label {
+    .collaborator-result.is-selected {
+        background: var(--subtle-bg, #f7f7f5);
+    }
+    .collaborator-avatar {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        border: 1px solid var(--border-color, #e5e5e5);
+        background: var(--subtle-bg, #f7f7f5);
+        font-size: 13px;
+        font-weight: 700;
+        overflow: hidden;
+    }
+    .collaborator-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .collaborator-name {
+        display: grid;
+        min-width: 0;
+        gap: 2px;
+    }
+    .collaborator-name strong,
+    .collaborator-name span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .collaborator-name span {
+        color: var(--muted-text, #787774);
+        font-size: 12px;
+    }
+    .collaborator-action {
+        color: var(--text-color, #37352f);
+        border: 1px solid var(--border-color, #e5e5e5);
+        border-radius: 999px;
+        padding: 5px 9px;
+        font-size: 12px;
+        white-space: nowrap;
+    }
+    .collaborator-result.is-selected .collaborator-action {
+        background: var(--subtle-bg, #f7f7f5);
+        color: var(--muted-text, #787774);
+    }
+    .selected-collaborators {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .collaborator-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        border: 1px solid var(--border-color, #e5e5e5);
+        border-radius: 999px;
+        background: var(--subtle-bg, #f7f7f5);
+        color: var(--text-color, #37352f);
+        font-size: 13px;
+        padding: 7px 9px;
+    }
+    .collaborator-chip button {
+        border: 0;
+        background: transparent;
+        color: var(--muted-text, #787774);
+        cursor: pointer;
+        padding: 0 2px;
+        font-size: 14px;
+        line-height: 1;
+    }
+    .goal-resource-manager {
+        display: grid;
+        gap: 14px;
+        margin-top: 16px;
+        padding-bottom: calc(110px + env(safe-area-inset-bottom));
+    }
+    .goal-resource-card {
+        display: grid;
+        gap: 12px;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 16px;
+        background: #fff;
+        padding: 16px;
+        box-shadow: var(--app-shadow, 0 1px 2px rgba(15, 15, 15, 0.03));
+    }
+    .goal-resource-card h3 {
         margin: 0;
+        color: var(--app-text, #37352f);
+        font-size: 16px;
     }
-    .form-box p:has(input[type="checkbox"]) input[type="checkbox"] {
-        margin: 0;
+    .goal-resource-list {
+        display: grid;
+        gap: 8px;
     }
-    .hidden-completion-date {
-        display: none;
+    .goal-resource-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 12px;
+        background: #f7f7f5;
+        padding: 10px;
+    }
+    .goal-resource-row strong,
+    .goal-resource-row span {
+        overflow-wrap: anywhere;
+    }
+    .goal-resource-form {
+        display: grid;
+        gap: 10px;
+        padding-top: 12px;
+        border-top: 1px solid var(--app-border, #e5e5e5);
+    }
+    .goal-resource-form .form-field {
+        display: grid;
+        gap: 6px;
+        min-width: 0;
+    }
+    .goal-resource-form input,
+    .goal-resource-form textarea,
+    .goal-resource-form select {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+    .goal-resource-form input[type="file"] {
+        min-height: 44px;
+        padding: 10px;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 10px;
+        background: #fff;
+    }
+    .goal-image-edit-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+        gap: 10px;
+    }
+    .goal-image-edit-card {
+        display: grid;
+        gap: 8px;
+        min-width: 0;
+    }
+    .goal-image-edit-card img {
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        object-fit: cover;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 12px;
+        background: #f7f7f5;
+    }
+    @media (max-width: 768px) {
+        .form-title-row {
+            grid-template-columns: 1fr;
+        }
+        .form-title-actions,
+        .form-box .actions {
+            justify-content: flex-end;
+        }
+        .form-box .actions .button {
+            min-width: 112px;
+            text-align: center;
+        }
+        .goal-resource-row {
+            grid-template-columns: 1fr;
+        }
+        .goal-resource-row form {
+            justify-self: end;
+        }
     }
 </style>
 
-<div class="page-title{% if actions_in_title %} form-title-row{% endif %}">
-    <h2>{{ title }}</h2>
-    {% if actions_in_title %}
-        <div class="form-title-actions">
-            <button class="button" type="submit" form="main-form">保存</button>
-            <a class="button" href="{{ cancel_url }}">キャンセル</a>
-        </div>
-    {% endif %}
-</div>
+{% include "goals/partials/app_form_header.html" with header_title=title back_url=cancel_url back_label=form_back_label cancel_url=cancel_url save_form_id="main-form" %}
 
-<form id="main-form" class="form-box" method="post" enctype="multipart/form-data">
+<form id="main-form" class="form-box" method="post" enctype="multipart/form-data" novalidate>
     {% csrf_token %}
-    {{ form.as_p }}
-    {% if not actions_in_title %}
-        <div class="actions">
-            <button class="button" type="submit">保存</button>
-            <a class="button" href="{{ cancel_url }}">キャンセル</a>
+    {% if form.errors %}
+        <div class="form-error-alert" role="alert">
+            <strong>入力内容を確認してください。</strong>
+            {% if form.non_field_errors %}
+                <ul>
+                    {% for error in form.non_field_errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
         </div>
     {% endif %}
+    {% for hidden in form.hidden_fields %}
+        {{ hidden }}
+    {% endfor %}
+    {% for field in form.visible_fields %}
+        <div class="form-field{% if field.errors %} has-error{% endif %}{% if field.name == 'collaborators' %} collaborator-field is-hidden{% endif %}" {% if field.name == 'collaborators' %}data-collaborator-field{% endif %}>
+            {% if field.name == "collaborators" %}
+                {{ field }}
+                <div class="collaborator-picker">
+                    <p class="collaborator-picker-title">共同編集メンバーを検索</p>
+                    <input class="collaborator-search" type="search" placeholder="表示名・ユーザー名で検索" data-collaborator-search>
+                    <div class="collaborator-section">
+                        <p class="collaborator-section-title">検索結果</p>
+                        <div class="collaborator-results" data-collaborator-results></div>
+                    </div>
+                    <div class="collaborator-section">
+                        <p class="collaborator-section-title">選択済みメンバー</p>
+                        <div class="selected-collaborators" data-selected-collaborators></div>
+                    </div>
+                </div>
+            {% elif field.field.widget.input_type == "checkbox" %}
+                <label class="checkbox-label" for="{{ field.id_for_label }}">
+                    {{ field }}
+                    <span>{{ field.label }}</span>
+                </label>
+            {% else %}
+                {{ field.label_tag }}
+                {{ field }}
+            {% endif %}
+            {% if field.help_text %}
+                <span class="field-help-text">{{ field.help_text }}</span>
+            {% endif %}
+            {% for error in field.errors %}
+                <p class="field-error-bubble">{{ error }}</p>
+            {% endfor %}
+        </div>
+    {% endfor %}
 </form>
+
+{% if goal_resource_manager %}
+    <section class="goal-resource-manager" aria-label="リンクと画像の管理">
+        <article id="goal-links" class="goal-resource-card">
+            <h3>リンク</h3>
+            {% if object.links.all %}
+                <div class="goal-resource-list">
+                    {% for link in object.links.all %}
+                        <div class="goal-resource-row">
+                            <div>
+                                <strong>{{ link.title|default:link.url }}</strong>
+                                <p class="meta">{{ link.url }}</p>
+                            </div>
+                            <form method="post" action="{% url 'goals:delete_goal_link' link.pk %}">
+                                {% csrf_token %}
+                                <button class="button small-button secondary-button" type="submit">削除</button>
+                            </form>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="meta">リンクはまだありません。</p>
+            {% endif %}
+
+            <form class="goal-resource-form" method="post" action="{% url 'goals:add_goal_link' object.pk %}">
+                {% csrf_token %}
+                <div class="form-field">
+                    {{ link_form.title.label_tag }}
+                    {{ link_form.title }}
+                </div>
+                <div class="form-field">
+                    {{ link_form.url.label_tag }}
+                    {{ link_form.url }}
+                </div>
+                <div class="form-actions right">
+                    <button class="button primary-button small-button" type="submit">リンクを追加</button>
+                </div>
+            </form>
+        </article>
+
+        <article id="goal-images" class="goal-resource-card">
+            <h3>画像</h3>
+            {% if object.images.all %}
+                <div class="goal-image-edit-grid">
+                    {% for image in object.images.all %}
+                        <div class="goal-image-edit-card">
+                            <img src="{{ image.image.url }}" alt="{{ image.caption|default:object.title }}">
+                            {% if image.caption %}
+                                <span class="meta">{{ image.caption }}</span>
+                            {% endif %}
+                            <form method="post" action="{% url 'goals:delete_goal_image' image.pk %}">
+                                {% csrf_token %}
+                                <button class="button small-button secondary-button" type="submit">削除</button>
+                            </form>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="meta">画像はまだありません。</p>
+            {% endif %}
+
+            <form class="goal-resource-form" method="post" action="{% url 'goals:add_goal_image' object.pk %}" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="form-field">
+                    {{ image_form.image.label_tag }}
+                    {{ image_form.image }}
+                </div>
+                <div class="form-field">
+                    {{ image_form.caption.label_tag }}
+                    {{ image_form.caption }}
+                </div>
+                <div class="form-actions right">
+                    <button class="button primary-button small-button" type="submit">画像を追加</button>
+                </div>
+            </form>
+        </article>
+    </section>
+{% endif %}
 
 <script>
     const doneControl = document.getElementById("id_is_done");
     const completedDateInput = document.getElementById("id_completed_date");
 
     if (doneControl && completedDateInput) {
-        const completedDateRow = completedDateInput.closest("p");
+        const completedDateRow = completedDateInput.closest(".form-field");
         const toggleCompletedDate = () => {
             const isCompleted = doneControl.type === "checkbox"
                 ? doneControl.checked
@@ -94,6 +424,109 @@
 
         doneControl.addEventListener("change", toggleCompletedDate);
         toggleCompletedDate();
+    }
+
+    const collaborativeToggle = document.getElementById("id_is_collaborative");
+    const collaboratorField = document.querySelector("[data-collaborator-field]");
+    const collaboratorSelect = document.querySelector("[data-collaborator-select]");
+
+    if (collaborativeToggle && collaboratorField && collaboratorSelect) {
+        const searchInput = collaboratorField.querySelector("[data-collaborator-search]");
+        const results = collaboratorField.querySelector("[data-collaborator-results]");
+        const selectedBox = collaboratorField.querySelector("[data-selected-collaborators]");
+        const options = Array.from(collaboratorSelect.options).map((option) => {
+            const label = option.textContent.trim();
+            const usernameMatch = label.match(/\(@(.+)\)$/);
+            const username = usernameMatch ? usernameMatch[1] : "";
+            const displayName = usernameMatch ? label.replace(/\s*\(@.+\)$/, "") : label;
+            return {
+                option,
+                id: option.value,
+                label,
+                displayName,
+                username,
+                initial: (displayName || username || "?").trim().charAt(0),
+                keyword: label.toLowerCase(),
+            };
+        });
+
+        const selectedIds = () => new Set(options.filter((item) => item.option.selected).map((item) => item.id));
+
+        const renderSelected = () => {
+            const selected = options.filter((item) => item.option.selected);
+            selectedBox.innerHTML = "";
+            if (!selected.length) {
+                const empty = document.createElement("span");
+                empty.className = "field-help-text";
+                empty.textContent = "選択済みメンバーはいません。";
+                selectedBox.appendChild(empty);
+                return;
+            }
+            selected.forEach((item) => {
+                const chip = document.createElement("span");
+                chip.className = "collaborator-chip";
+                chip.textContent = item.displayName;
+                const remove = document.createElement("button");
+                remove.type = "button";
+                remove.textContent = "×";
+                remove.setAttribute("aria-label", `${item.displayName}を削除`);
+                remove.addEventListener("click", () => {
+                    item.option.selected = false;
+                    render();
+                });
+                chip.appendChild(remove);
+                selectedBox.appendChild(chip);
+            });
+        };
+
+        const renderResults = () => {
+            const query = (searchInput.value || "").trim().toLowerCase();
+            const selected = selectedIds();
+            const matches = options
+                .filter((item) => !query || item.keyword.includes(query))
+                .slice(0, 12);
+            results.innerHTML = "";
+            if (!matches.length) {
+                const empty = document.createElement("span");
+                empty.className = "field-help-text";
+                empty.textContent = "候補が見つかりません。";
+                results.appendChild(empty);
+                return;
+            }
+            matches.forEach((item) => {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = `collaborator-result${selected.has(item.id) ? " is-selected" : ""}`;
+                button.innerHTML = `
+                    <span class="collaborator-avatar">${item.initial}</span>
+                    <span class="collaborator-name">
+                        <strong>${item.displayName}</strong>
+                        <span>${item.username ? "@" + item.username : ""}</span>
+                    </span>
+                    <span class="collaborator-action">${selected.has(item.id) ? "追加済み" : "追加"}</span>
+                `;
+                button.addEventListener("click", () => {
+                    if (!selected.has(item.id)) {
+                        item.option.selected = true;
+                    }
+                    render();
+                });
+                results.appendChild(button);
+            });
+        };
+
+        const render = () => {
+            collaboratorField.classList.toggle("is-hidden", !collaborativeToggle.checked);
+            if (!collaborativeToggle.checked) {
+                options.forEach((item) => { item.option.selected = false; });
+            }
+            renderResults();
+            renderSelected();
+        };
+
+        collaborativeToggle.addEventListener("change", render);
+        searchInput.addEventListener("input", renderResults);
+        render();
     }
 </script>
 {% endblock %}

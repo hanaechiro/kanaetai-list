@@ -1,0 +1,44 @@
+{% extends "goals/base.html" %}
+
+{% block title %}アカウントを削除 - Wishly{% endblock %}
+
+{% block content %}
+<style>
+    .account-delete-card {
+        display: grid;
+        gap: 14px;
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 18px;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: var(--ui-card-radius, 12px);
+        background: #fff;
+    }
+    .account-delete-card p {
+        margin: 0;
+        color: var(--app-muted, #787774);
+        font-size: 14px;
+        line-height: 1.7;
+    }
+    .account-delete-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 4px;
+    }
+</style>
+
+{% url 'goals:account_settings' as account_settings_url %}
+{% include "goals/partials/app_form_header.html" with header_title="アカウントを削除" back_url=account_settings_url back_label="← アカウント設定へ戻る" %}
+
+<section class="account-delete-card">
+    <p>アカウントを削除すると、元に戻すことはできません。続行する場合のみ削除してください。</p>
+    <form method="post">
+        {% csrf_token %}
+        <div class="account-delete-actions">
+            <a class="button pill-button secondary-button" href="{{ account_settings_url }}">キャンセル</a>
+            <button class="button pill-button danger" type="submit">アカウントを削除</button>
+        </div>
+    </form>
+</section>
+{% endblock %}

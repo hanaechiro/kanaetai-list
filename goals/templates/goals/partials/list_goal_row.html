@@ -1,0 +1,87 @@
+{% if can_delete_goal %}
+<div class="list-item-swipe-shell" data-swipe-delete-shell>
+    <div class="list-item-swipe-action" aria-hidden="true">
+        <form method="post" action="{% url 'goals:yearly_goal_delete' goal.pk %}" data-swipe-delete-form>
+            {% csrf_token %}
+            <button type="submit">削除</button>
+        </form>
+    </div>
+{% endif %}
+<div class="list-item-row notebook-goal-row public-goal-row note-line {% if goal.is_done %}done{% endif %}">
+    {% if can_toggle_goal %}
+        <form id="goal-toggle-{{ goal.pk }}" class="notebook-check-form goal-toggle-cell" method="post" action="{% url 'goals:toggle_done' 'yearly' goal.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="is_done" value="0">
+            <input
+                class="goal-check app-checkbox"
+                type="checkbox"
+                name="is_done"
+                value="1"
+                aria-label="{{ goal.title }}を達成済みにする"
+                {% if goal.is_done %}checked{% endif %}
+            >
+        </form>
+    {% else %}
+        <span class="app-checkbox is-readonly {% if goal.is_done %}is-checked{% endif %}" aria-hidden="true"></span>
+    {% endif %}
+
+    <div class="notebook-goal-main public-goal-main">
+        <div class="notebook-goal-primary public-goal-primary">
+            {% if goal_detail_url_name == "goals:yearly_goal_detail" %}
+                <a class="notebook-goal-title public-goal-title public-goal-title-link" href="{% url 'goals:yearly_goal_detail' goal.pk %}">{{ goal.title }}</a>
+            {% else %}
+                <a class="notebook-goal-title public-goal-title public-goal-title-link" href="{% url 'goals:public_goal_detail' goal.pk %}">{{ goal.title }}</a>
+            {% endif %}
+            <span class="status-pill">{{ goal.get_category_display }}</span>
+            {% if show_item_privacy and not goal.item_is_public %}
+                <span class="status-pill private">項目非公開</span>
+            {% endif %}
+        </div>
+
+        {% if goal.is_done %}
+            <span class="completed-date">
+                完了日：
+                {% if goal.completed_date %}
+                    {{ goal.completed_date|date:"Y/m/d" }}
+                {% else %}
+                    未入力
+                {% endif %}
+            </span>
+        {% endif %}
+
+        {% if show_collaboration_meta %}
+            <span class="meta-text">
+                追加：{% if goal.added_by %}{{ goal.added_by.profile.display_name|default:goal.added_by.username }}{% else %}未記録{% endif %}
+                {% if goal.completed_by %} / 完了：{{ goal.completed_by.profile.display_name|default:goal.completed_by.username }}{% endif %}
+            </span>
+        {% endif %}
+
+        {% if can_toggle_goal %}
+            <span class="completion-editor" data-completion-editor-for="{{ goal.pk }}">
+                <label>
+                    完了日
+                    <input type="date" name="completed_date" value="{{ goal.completed_date|date:'Y-m-d' }}" form="goal-toggle-{{ goal.pk }}">
+                </label>
+                <button class="button small-button pill-button secondary-button completion-cancel-button" type="button" data-cancel-completion>キャンセル</button>
+                <button class="button small-button pill-button primary-button completion-save-button" type="submit" form="goal-toggle-{{ goal.pk }}">保存</button>
+            </span>
+        {% endif %}
+    </div>
+
+    {% if show_save_button %}
+        <div class="public-goal-actions">
+            <form class="want-form public-goal-save-form" method="post" action="{% url 'goals:toggle_saved_item' goal.pk %}">
+                {% csrf_token %}
+                <button class="social-icon-button bookmark-button public-goal-save-button {% if goal.is_saved_by_current_user %}is-active{% endif %}" type="submit" aria-label="保存">
+                    <svg class="bookmark-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M6 4.75C6 3.78 6.78 3 7.75 3h8.5c.97 0 1.75.78 1.75 1.75v15.1L12 16.2l-6 3.65V4.75Z"></path>
+                    </svg>
+                    <span class="sr-only">{% if goal.is_saved_by_current_user %}保存済み{% else %}保存{% endif %}</span>
+                </button>
+            </form>
+        </div>
+    {% endif %}
+</div>
+{% if can_delete_goal %}
+</div>
+{% endif %}

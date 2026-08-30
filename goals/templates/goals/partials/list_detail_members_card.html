@@ -1,0 +1,47 @@
+{% if group and group.plan.is_collaborative or setting and setting.is_collaborative %}
+    <section class="detail-card list-detail-section-card" aria-label="メンバー">
+        <header class="list-detail-section-header">
+            <h3>メンバー</h3>
+            <span class="section-count">
+                {% if group %}
+                    {{ group.plan.collaborators.all|length|add:1 }}人
+                {% else %}
+                    {{ member_count }}人
+                {% endif %}
+            </span>
+        </header>
+        <div class="member-list">
+            {% if group %}
+                <div class="member-row">
+                    <p class="member-name">{{ group.plan.user.profile.display_name|default:group.plan.user.username }}</p>
+                    <span class="status-pill">owner</span>
+                </div>
+                {% for collaborator in group.plan.collaborators.all %}
+                    <div class="member-row">
+                        <p class="member-name">{{ collaborator.profile.display_name|default:collaborator.username }}</p>
+                        <span class="status-pill">member</span>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="member-row">
+                    <p class="member-name">{{ setting.user.profile.display_name|default:setting.user.username }}</p>
+                    <span class="status-pill">owner</span>
+                </div>
+                {% for collaborator in setting.collaborators.all %}
+                    <div class="member-row">
+                        <p class="member-name">{{ collaborator.profile.display_name|default:collaborator.username }}</p>
+                        <span class="status-pill">member</span>
+                    </div>
+                {% endfor %}
+                {% if can_manage_list and collaboration_invites %}
+                    {% for invite in collaboration_invites %}
+                        <div class="member-row">
+                            <p class="member-name">{{ invite.invitee.profile.display_name|default:invite.invitee.username }}</p>
+                            <span class="status-pill private">招待中</span>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endif %}
+        </div>
+    </section>
+{% endif %}

@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
+from goals.demo_profile_icons import apply_demo_profile_icon
 from goals.models import Follow, LikeList, Profile, SavedList, YearPlan, YearlyGoal
 
 
@@ -230,7 +231,8 @@ class Command(BaseCommand):
             profile, _ = Profile.objects.get_or_create(user=user)
             profile.display_name = spec["display_name"]
             profile.bio = spec["bio"]
-            profile.save(update_fields=["display_name", "bio"])
+            apply_demo_profile_icon(profile, spec["username"])
+            profile.save()
 
             for list_index, list_spec in enumerate(spec["lists"]):
                 plan, _ = YearPlan.objects.update_or_create(

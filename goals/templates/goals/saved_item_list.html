@@ -6,15 +6,25 @@
 <style>
     .saved-item-grid {
         display: grid;
-        gap: 14px;
+        gap: 10px;
     }
     .saved-item-card {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 34px;
+        align-items: center;
+        gap: 10px;
+        padding-block: 13px !important;
         cursor: pointer;
+    }
+    .saved-item-card-body {
+        display: grid;
+        gap: 7px;
+        min-width: 0;
     }
     .saved-item-card h3 {
         margin: 0;
         color: #3d3021;
-        font-size: 18px;
+        font-size: 17px;
         line-height: 1.45;
     }
     .saved-item-link {
@@ -35,42 +45,51 @@
         align-items: center;
     }
     .saved-item-actions {
-        display: flex;
-        justify-content: flex-end;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        align-self: center;
+        justify-self: end;
     }
     .saved-item-actions form {
         margin: 0;
     }
 </style>
 
-<div class="page-title">
-    <h2>保存した項目</h2>
-</div>
+{% url 'goals:my_profile' as my_profile_url %}
+{% include "goals/partials/app_form_header.html" with header_title="保存した項目" back_url=my_profile_url back_label="← マイページへ戻る" %}
 
 <section class="saved-item-grid">
     {% for saved in saved_items %}
         {% with item=saved.item plan=saved.item.year_plan %}
             <article class="list-card saved-item-card" data-href="{% url 'goals:public_goal_detail' item.pk %}">
-                <div class="list-card-top">
-                    <div>
+                <div class="saved-item-card-body">
+                    <div class="list-card-top">
+                        <div>
                         <p class="discover-user">{{ plan.user.profile.display_name|default:plan.user.username }}さん / {{ plan.list_title|default:"マイリスト" }}</p>
                         <h3>
                             <a class="saved-item-link" href="{% url 'goals:public_goal_detail' item.pk %}">{{ item.title }}</a>
                         </h3>
+                        </div>
                     </div>
-                </div>
 
-                <div class="saved-item-meta">
-                    <span class="status-pill">{{ item.get_category_display }}</span>
-                    <span class="status-pill {% if not item.is_done %}private{% endif %}">
-                        {% if item.is_done %}完了済み{% else %}未完了{% endif %}
-                    </span>
+                    <div class="saved-item-meta">
+                        <span class="status-pill">{{ item.get_category_display }}</span>
+                        {% if item.is_done and item.completed_date %}
+                            <span class="completed-date">完了日：{{ item.completed_date|date:"Y/m/d" }}</span>
+                        {% endif %}
+                    </div>
                 </div>
 
                 <div class="saved-item-actions">
                     <form method="post" action="{% url 'goals:toggle_saved_item' item.pk %}">
                         {% csrf_token %}
-                        <button class="button small-button pill-button" type="submit">保存解除</button>
+                        <button class="social-icon-button bookmark-button public-goal-save-button is-active" type="submit" aria-label="保存解除">
+                            <svg class="bookmark-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path d="M6 4.75C6 3.78 6.78 3 7.75 3h8.5c.97 0 1.75.78 1.75 1.75v15.1L12 16.2l-6 3.65V4.75Z"></path>
+                            </svg>
+                            <span class="sr-only">保存解除</span>
+                        </button>
                     </form>
                 </div>
             </article>

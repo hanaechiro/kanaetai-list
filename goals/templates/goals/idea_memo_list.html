@@ -1,13 +1,23 @@
 {% extends "goals/base.html" %}
 
-{% block title %}思いつきメモ - 叶えたいことリスト{% endblock %}
+{% block title %}思いつきメモ - Wishly{% endblock %}
 
 {% block content %}
 <style>
+    .idea-page {
+        display: grid;
+        gap: 16px;
+        padding-bottom: calc(110px + env(safe-area-inset-bottom));
+    }
     .idea-page-title {
+        display: flex;
         align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 0;
     }
     .idea-page-title .button {
+        flex: 0 0 auto;
         min-width: 92px;
         justify-content: center;
         white-space: nowrap;
@@ -17,11 +27,11 @@
         gap: 12px;
     }
     .memo-card {
-        border: 1px solid #eadfce;
+        border: 1px solid var(--app-border, #e5e5e5);
         border-radius: 16px;
-        background: #fffdf8;
+        background: #fff;
         padding: 14px 15px;
-        box-shadow: 0 7px 16px rgba(76, 57, 33, 0.05);
+        box-shadow: var(--app-shadow, 0 1px 2px rgba(15, 15, 15, 0.03));
     }
     .memo-card-header {
         display: flex;
@@ -35,60 +45,51 @@
         gap: 8px;
         white-space: nowrap;
     }
-    .memo-action-link {
-        border: 1px solid #eadfce;
-        border-radius: 999px;
-        background: #fff8ec;
-        color: #6a5538;
-        padding: 4px 9px;
-        font-size: 12px;
-        font-weight: 700;
-        text-decoration: none;
-    }
-    .memo-action-link:hover,
-    .memo-action-link:focus,
-    .memo-action-link:active {
-        background: #f6ecdc;
-        text-decoration: none;
-    }
-    .memo-action-link.danger {
-        border-color: #ead5ce;
-        background: #fff7f4;
-        color: #8b4a3d;
+    .memo-card-actions .button {
+        min-width: 54px;
+        justify-content: center;
     }
     .memo-card p {
         margin-bottom: 0;
     }
     @media (max-width: 768px) {
+        .idea-page {
+            gap: 14px;
+        }
         .memo-card {
             padding: 13px;
         }
         .memo-card-header {
             align-items: flex-start;
         }
+        .memo-card-actions .button {
+            min-width: 50px;
+            padding-inline: 10px;
+        }
     }
 </style>
 
-<div class="page-title idea-page-title">
-    <h2>思いつきメモ</h2>
-    <a class="button pill-button" href="{% url 'goals:idea_memo_add' %}">＋追加</a>
-</div>
+<div class="idea-page">
+    {% url 'goals:my_profile' as my_profile_url %}
+    {% url 'goals:idea_memo_add' as idea_memo_add_url %}
+    {% include "goals/partials/app_form_header.html" with header_title="思いつきメモ" back_url=my_profile_url back_label="← マイページへ戻る" primary_action_url=idea_memo_add_url primary_action_label="＋追加" %}
 
-<section class="memo-list">
-    {% for memo in memos %}
-        <article class="memo-card">
-            <div class="memo-card-header">
-                <div class="item-title">{{ memo.title }}</div>
-                <div class="memo-card-actions">
-                    <a class="memo-action-link" href="{% url 'goals:idea_memo_edit' memo.pk %}">編集</a>
-                    <a class="memo-action-link danger" href="{% url 'goals:idea_memo_delete' memo.pk %}">削除</a>
+    <section class="memo-list">
+        {% for memo in memos %}
+            <article class="memo-card">
+                <div class="memo-card-header">
+                    <div class="item-title">{{ memo.title }}</div>
+                    <div class="memo-card-actions">
+                        <a class="button small-button secondary-button danger" href="{% url 'goals:idea_memo_delete' memo.pk %}">削除</a>
+                        <a class="button small-button primary-button" href="{% url 'goals:idea_memo_edit' memo.pk %}">編集</a>
+                    </div>
                 </div>
-            </div>
-            {% if memo.note %}<p>{{ memo.note|linebreaksbr }}</p>{% endif %}
-            <p class="meta">{{ memo.created_at|date:"Y年n月j日 H:i" }}</p>
-        </article>
-    {% empty %}
-        <p class="notice">まだ思いつきメモがありません。</p>
-    {% endfor %}
-</section>
+                {% if memo.note %}<p>{{ memo.note|linebreaksbr }}</p>{% endif %}
+                <p class="meta">{{ memo.created_at|date:"Y年n月j日 H:i" }}</p>
+            </article>
+        {% empty %}
+            <p class="notice">まだ思いつきメモがありません。</p>
+        {% endfor %}
+    </section>
+</div>
 {% endblock %}

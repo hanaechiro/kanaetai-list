@@ -1,23 +1,164 @@
 {% extends "goals/base.html" %}
 
-{% block title %}{{ group.list_title }} - みんなのマイリスト{% endblock %}
+{% block title %}{{ group.list_title }} - 発見{% endblock %}
 
 {% block content %}
 {% include "goals/partials/list_detail_notebook_styles.html" %}
 
-<div class="detail-top-nav">
-    <a class="back-link" href="{% url 'goals:public_goal_list' %}">← みんなのマイリスト</a>
-</div>
+<style>
+    .public-detail-stack {
+        display: grid;
+        gap: 12px;
+    }
+    .public-detail-card {
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 16px;
+        background: #fff;
+        padding: 14px 16px;
+        box-shadow: 0 1px 2px rgba(15, 15, 15, 0.04);
+    }
+    .public-owner-card {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+    }
+    .public-owner-name {
+        color: #37352f;
+        font-weight: 700;
+        overflow-wrap: anywhere;
+    }
+    .public-owner-card form,
+    .public-list-actions form,
+    .public-goal-save-form {
+        margin: 0;
+    }
+    .public-list-card {
+        display: grid;
+        gap: 10px;
+    }
+    .public-list-title-row {
+        display: grid;
+        gap: 4px;
+        align-items: start;
+    }
+    .public-list-title-row h2 {
+        margin: 0;
+        color: #37352f;
+        font-size: clamp(22px, 6vw, 30px);
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+    }
+    .public-list-title-row .meta {
+        margin: 4px 0 0;
+    }
+    .public-list-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 12px;
+        margin-top: 4px;
+        padding-top: 10px;
+        border-top: 1px solid var(--app-border, #e5e5e5);
+    }
+    .public-progress-meta {
+        margin: 0;
+        color: #37352f;
+        font-weight: 700;
+    }
+    .public-list-section {
+        margin-top: 0;
+    }
+    .public-goal-save-button {
+        min-width: 40px;
+        min-height: 40px;
+        height: 40px;
+        padding: 7px;
+    }
+    .public-goal-actions {
+        display: flex;
+        align-items: flex-start;
+        justify-content: flex-end;
+        margin-left: 0;
+    }
+    .public-goal-main {
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+    }
+    .public-goal-primary {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        min-width: 0;
+    }
+    .public-goal-main .completed-date {
+        display: block;
+        width: 100%;
+        color: var(--app-muted, #787774);
+        font-size: 12px;
+        line-height: 1.45;
+    }
+    .yearly-notebook .public-goal-row.note-line {
+        display: grid;
+        grid-template-columns: 20px minmax(0, 1fr) 44px;
+        column-gap: 8px;
+        align-items: center;
+    }
+    .yearly-notebook .public-goal-row > .app-checkbox {
+        grid-column: 1;
+        grid-row: 1;
+        margin-top: 0;
+    }
+    .yearly-notebook .public-goal-row .public-goal-main {
+        grid-column: 2;
+        grid-row: 1;
+        min-width: 0;
+    }
+    .yearly-notebook .public-goal-row .public-goal-actions {
+        grid-column: 3;
+        grid-row: 1;
+        justify-self: end;
+        align-self: center;
+    }
+    @media (max-width: 768px) {
+        .public-detail-stack {
+            gap: 12px;
+        }
+        .public-detail-card {
+            padding: 13px 14px;
+        }
+        .public-owner-card {
+            grid-template-columns: auto minmax(0, 1fr) auto;
+        }
+        .public-list-title-row {
+            grid-template-columns: minmax(0, 1fr) auto;
+        }
+        .public-list-actions {
+            flex-direction: row !important;
+            align-items: center !important;
+            gap: 10px !important;
+            overflow-x: auto;
+        }
+        .yearly-notebook .public-goal-row.note-line {
+            grid-template-columns: 20px minmax(0, 1fr) 44px !important;
+            align-items: center !important;
+        }
+    }
+</style>
 
-<div class="page-title list-title-row">
-    <div>
-        <h2>{{ group.list_title }}</h2>
-        <p class="meta">最終更新日：{{ group.plan.updated_at|date:"Y/m/d H:i" }}</p>
+<div class="public-detail-stack">
+    <div class="detail-top-nav">
+        <a class="back-link" href="{% url 'goals:public_goal_list' %}">← 発見</a>
     </div>
-</div>
 
-<section class="progress-summary detail-summary">
-    <div class="detail-owner-row">
+    {% include "goals/partials/list_detail_overview_card.html" %}
+
+    {% include "goals/partials/list_detail_members_card.html" %}
+
+    {% comment %}
+    <section class="public-detail-card public-owner-card" aria-label="作成者">
         <a class="avatar detail-owner-link" href="{% url 'goals:profile_detail' group.user.username %}" aria-label="{{ group.display_name }}さんのプロフィール">
             {% if group.user.profile.icon %}
                 <img src="{{ group.user.profile.icon.url }}" alt="">
@@ -25,12 +166,12 @@
                 {{ group.display_name|slice:":1" }}
             {% endif %}
         </a>
-        <span class="detail-owner-name">{{ group.display_name }}さん</span>
+        <span class="public-owner-name">{{ group.display_name }}さん</span>
         {% if group.can_react %}
             <form method="post" action="{% url 'goals:toggle_follow' group.user.username %}">
                 {% csrf_token %}
                 <button class="button small-button pill-button settings-button" type="submit">
-                    {% if group.is_following %}フォロー中{% else %}フォロー{% endif %}
+                    {% if group.is_following %}フォロー中{% elif group.follow_request_status == "pending" %}申請中{% else %}フォロー{% endif %}
                 </button>
             </form>
         {% elif not user.is_authenticated and group.user %}
@@ -39,76 +180,100 @@
                 <button class="button small-button pill-button settings-button" type="submit">フォロー</button>
             </form>
         {% endif %}
-    </div>
+    </section>
 
-    <p class="meta">達成 {{ group.done_count }}件 / 登録 {{ group.total_count }}件 / 目標 {{ group.target_count }}件 / あと {{ group.remaining_count }}件</p>
-    <div class="progress-track">
-        <div class="progress-bar" style="width: {{ group.progress_percent }}%;"></div>
-    </div>
-    <div class="progress-summary-row detail-summary-row">
-        <span class="status-pill">達成率 {{ group.progress_percent }}%</span>
-        <span class="status-pill">目標 {{ group.target_count }}件</span>
-        <span class="status-pill">このリストは公開</span>
-    </div>
-    <div class="detail-reaction-row reaction-actions">
-        {% if group.can_react %}
-            <div class="reaction-pair">
-                <span class="status-pill">いいね {{ group.like_count }}</span>
-                <form method="post" action="{% url 'goals:toggle_like_list' group.plan.pk %}">
-                    {% csrf_token %}
-                    <button class="button small-button pill-button settings-button" type="submit">
-                        {% if group.is_liked %}♡ 済み{% else %}♡{% endif %}
-                    </button>
-                </form>
+    <section class="public-detail-card public-list-card" aria-label="リスト情報">
+        <div class="public-list-title-row">
+            <div>
+                <h2>{{ group.list_title }}</h2>
+                <p class="meta">最終更新日：{{ group.plan.updated_at|date:"Y/m/d H:i" }}</p>
             </div>
-            <div class="reaction-pair">
-                <span class="status-pill">保存 {{ group.save_count }}</span>
-                <form method="post" action="{% url 'goals:toggle_saved_list' group.plan.pk %}">
-                    {% csrf_token %}
-                    <button class="button small-button pill-button settings-button" type="submit">
-                        {% if group.is_saved %}保存済み{% else %}保存{% endif %}
-                    </button>
-                </form>
+        </div>
+
+        <p class="public-progress-meta">達成 {{ group.done_count }}件 / 登録 {{ group.total_count }}件 / 目標 {{ group.target_count }}件</p>
+        <p class="meta">達成率 {{ group.progress_percent }}%</p>
+        <div class="progress-track">
+            <div class="progress-bar" style="width: {{ group.progress_percent }}%;"></div>
+        </div>
+        {% if group.plan.is_collaborative %}
+            <div class="progress-summary-row detail-summary-row">
+                <span class="status-pill">共同リスト</span>
             </div>
-        {% elif not user.is_authenticated %}
-            <div class="reaction-pair">
-                <span class="status-pill">いいね {{ group.like_count }}</span>
-                <form method="post" action="{% url 'goals:toggle_like_list' group.plan.pk %}">
-                    {% csrf_token %}
-                    <button class="button small-button pill-button settings-button" type="submit">♡</button>
-                </form>
-            </div>
-            <div class="reaction-pair">
-                <span class="status-pill">保存 {{ group.save_count }}</span>
-                <form method="post" action="{% url 'goals:toggle_saved_list' group.plan.pk %}">
-                    {% csrf_token %}
-                    <button class="button small-button pill-button settings-button" type="submit">保存</button>
-                </form>
-            </div>
-        {% else %}
-            <span class="status-pill">いいね {{ group.like_count }}</span>
-            <span class="status-pill">保存 {{ group.save_count }}</span>
         {% endif %}
-    </div>
-</section>
 
-<section class="yearly-notebook book">
-    <header class="notebook-header">
-        <h3>リスト一覧</h3>
-    </header>
-
-    {% include "goals/partials/list_detail_notebook_pages.html" with left_goals=group.left_goals right_goals=group.right_goals row_template="goals/partials/public_list_goal_row.html" hide_item_actions=True %}
-</section>
-
-{% if group.list_total_pages > 1 %}
-    <nav class="app-pagination">
-        {% if group.list_previous_query %}
-            <a class="button small-button pill-button" href="?{{ group.list_previous_query }}">前へ</a>
+        {% if group.plan.is_collaborative %}
+            <div class="progress-summary-row detail-summary-row">
+                <span class="status-pill">owner：{{ group.plan.user.profile.display_name|default:group.plan.user.username }}</span>
+                {% for collaborator in group.plan.collaborators.all %}
+                    <span class="status-pill">{{ collaborator.profile.display_name|default:collaborator.username }}</span>
+                {% empty %}
+                    <span class="status-pill private">メンバー未設定</span>
+                {% endfor %}
+            </div>
         {% endif %}
-        <span>{{ group.list_current_page }} / {{ group.list_total_pages }} ページ</span>
-        {% if group.list_next_query %}
-            <a class="button small-button pill-button" href="?{{ group.list_next_query }}">次へ</a>
-        {% endif %}
-    </nav>
-{% endif %}
+        <div class="public-list-actions" aria-label="リスト操作">
+            <form class="social-action-form" method="post" action="{% url 'goals:toggle_like_list' group.plan.pk %}">
+                {% csrf_token %}
+                <button class="social-icon-button like-button {% if group.is_liked %}is-active{% endif %}" type="submit" aria-label="いいね">
+                    <span class="heart-icon">{% if group.is_liked %}♥{% else %}♡{% endif %}</span>
+                    <span class="social-count">{{ group.like_count }}</span>
+                </button>
+            </form>
+            <button
+                class="social-icon-button share-list-button"
+                type="button"
+                data-copy-list-url="{% url 'goals:public_list_detail' group.plan.pk %}"
+                data-share-count-url="{% url 'goals:record_list_share' group.plan.pk %}"
+                data-share-title="{{ group.list_title }}"
+                data-share-text="{{ group.display_name }}さんのWishlyリスト「{{ group.list_title }}」"
+                aria-label="共有"
+            >
+                <svg class="share-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M4 12.5 20 4l-4.2 16-3.6-6.1L4 12.5Z"></path>
+                </svg>
+                <span class="social-count" data-share-count>{{ group.share_count|default:0 }}</span>
+                <span class="sr-only" data-copy-label>リンクをコピー</span>
+            </button>
+            <form class="social-action-form" method="post" action="{% url 'goals:toggle_saved_list' group.plan.pk %}">
+                {% csrf_token %}
+                <button class="social-icon-button bookmark-button {% if group.is_saved %}is-active{% endif %}" type="submit" aria-label="保存">
+                    <svg class="bookmark-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M6 4.75C6 3.78 6.78 3 7.75 3h8.5c.97 0 1.75.78 1.75 1.75v15.1L12 16.2l-6 3.65V4.75Z"></path>
+                    </svg>
+                    <span class="social-count sr-only">{{ group.save_count }}</span>
+                </button>
+            </form>
+        </div>
+    </section>
+    {% endcomment %}
+
+    <section class="detail-card list-panel public-list-section">
+        <header class="list-panel-header">
+            <h3>リスト一覧</h3>
+        </header>
+        <div class="goal-list-shell">
+            {% for goal in group.left_goals %}
+                {% include "goals/partials/public_list_goal_row.html" with goal=goal group=group hide_item_actions=True %}
+            {% endfor %}
+            {% for goal in group.right_goals %}
+                {% include "goals/partials/public_list_goal_row.html" with goal=goal group=group hide_item_actions=True %}
+            {% endfor %}
+            {% if not group.left_goals and not group.right_goals %}
+                <p class="meta empty-list-note">項目はまだありません。</p>
+            {% endif %}
+        </div>
+    </section>
+
+    {% if group.list_total_pages > 1 %}
+        <nav class="app-pagination">
+            {% if group.list_previous_query %}
+                <a class="button small-button pill-button" href="?{{ group.list_previous_query }}">前へ</a>
+            {% endif %}
+            <span>{{ group.list_current_page }} / {{ group.list_total_pages }} ページ</span>
+            {% if group.list_next_query %}
+                <a class="button small-button pill-button" href="?{{ group.list_next_query }}">次へ</a>
+            {% endif %}
+        </nav>
+    {% endif %}
+</div>
 {% endblock %}

@@ -1,0 +1,66 @@
+{% extends "goals/base.html" %}
+
+{% block title %}フォロー申請 - Wishly{% endblock %}
+
+{% block content %}
+<style>
+    .user-list {
+        display: grid;
+        gap: 10px;
+    }
+    .user-row {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        gap: 12px;
+        border: 1px solid #e5e5e5;
+        border-radius: 16px;
+        background: #fff;
+        padding: 12px 14px;
+    }
+    .user-row-name {
+        margin: 0;
+        color: #37352f;
+        font-weight: 700;
+    }
+    .user-row-id {
+        margin: 3px 0 0;
+        color: #787774;
+        font-size: 13px;
+    }
+</style>
+
+<div class="page-title">
+    <h2>フォロー申請</h2>
+</div>
+
+<section class="user-list">
+    {% for request_obj in requests %}
+        <article class="user-row">
+            <a class="avatar" href="{% url 'goals:profile_detail' request_obj.requester.username %}">
+                {% if request_obj.requester.profile.icon %}
+                    <img src="{{ request_obj.requester.profile.icon.url }}" alt="">
+                {% else %}
+                    {{ request_obj.requester.profile.display_name|default:request_obj.requester.username|slice:":1" }}
+                {% endif %}
+            </a>
+            <div>
+                <p class="user-row-name">{{ request_obj.requester.profile.display_name|default:request_obj.requester.username }}</p>
+                <p class="user-row-id">フォローをリクエストしています</p>
+                <div class="discover-actions" style="margin-top: 10px;">
+                    <form method="post" action="{% url 'goals:respond_follow_request' request_obj.pk 'accepted' %}">
+                        {% csrf_token %}
+                        <button class="button small-button pill-button" type="submit">承認</button>
+                    </form>
+                    <form method="post" action="{% url 'goals:respond_follow_request' request_obj.pk 'rejected' %}">
+                        {% csrf_token %}
+                        <button class="button small-button pill-button" type="submit">却下</button>
+                    </form>
+                </div>
+            </div>
+        </article>
+    {% empty %}
+        <p class="notice">フォロー申請はまだありません。</p>
+    {% endfor %}
+</section>
+{% endblock %}

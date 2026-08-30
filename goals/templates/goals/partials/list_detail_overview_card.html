@@ -1,0 +1,134 @@
+<section class="detail-card list-detail-overview-card" aria-label="リスト概要">
+    <div class="list-detail-overview-head">
+        <div class="list-detail-title-block">
+            <div class="list-detail-title-row">
+                {% if group %}
+                    <h2 class="list-title">{{ group.list_title }}</h2>
+                    <span class="visibility-badge">公開</span>
+                    {% if group.plan.is_collaborative %}<span class="status-pill">共同リスト</span>{% endif %}
+                {% else %}
+                    <h2 class="list-title">{{ setting.list_title|default:"マイリスト" }}</h2>
+                    <span class="visibility-badge {% if not setting.is_public %}private{% endif %}">{% if setting.is_public %}公開{% else %}非公開{% endif %}</span>
+                    {% if setting.is_collaborative %}<span class="status-pill">共同リスト</span>{% endif %}
+                {% endif %}
+            </div>
+            {% if group %}
+                {% if group.plan.description %}
+                    <p class="list-detail-description">{{ group.plan.description|linebreaksbr }}</p>
+                {% endif %}
+            {% else %}
+                {% if setting.description %}
+                    <p class="list-detail-description">{{ setting.description|linebreaksbr }}</p>
+                {% endif %}
+            {% endif %}
+
+            <div class="list-detail-meta-row">
+                {% if group %}
+                    <span>作成者：{{ group.display_name }}</span>
+                    <span aria-hidden="true">・</span>
+                    <span>最終更新日：{{ group.plan.updated_at|date:"Y/m/d" }}</span>
+                {% else %}
+                    <span>作成者：{{ setting.user.profile.display_name|default:setting.user.username }}</span>
+                    <span aria-hidden="true">・</span>
+                    <span>最終更新日：{{ setting.updated_at|date:"Y/m/d" }}</span>
+                {% endif %}
+            </div>
+            <div class="list-detail-meta-row">
+                {% if group %}
+                    <span>達成 {{ group.done_count }}件</span>
+                    <span aria-hidden="true">・</span>
+                    <span>登録 {{ group.total_count }}件</span>
+                    <span aria-hidden="true">・</span>
+                    <span>目標 {{ group.target_count }}件</span>
+                {% else %}
+                    <span>達成 {{ done_count }}件</span>
+                    <span aria-hidden="true">・</span>
+                    <span>登録 {{ total_count }}件</span>
+                    <span aria-hidden="true">・</span>
+                    <span>目標 {{ setting.target_count }}件</span>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>
+
+    <div class="list-detail-progress">
+        <div class="progress-track">
+            {% if group %}
+                <div class="progress-bar" style="width: {{ group.progress_percent }}%;"></div>
+                <span class="progress-label">{{ group.progress_percent }}%</span>
+            {% else %}
+                <div class="progress-bar" style="width: {{ setting.progress_percent }}%;"></div>
+                <span class="progress-label">{{ setting.progress_percent }}%</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="list-detail-social-actions" aria-label="リスト操作">
+        {% if group %}
+            <form class="social-action-form" method="post" action="{% url 'goals:toggle_like_list' group.plan.pk %}">
+                {% csrf_token %}
+                <button class="social-icon-button like-button {% if group.is_liked %}is-active{% endif %}" type="submit" aria-label="いいね">
+                    <span class="heart-icon">{% if group.is_liked %}♥{% else %}♡{% endif %}</span>
+                    <span class="social-count">{{ group.like_count }}</span>
+                </button>
+            </form>
+            <button
+                class="social-icon-button share-list-button"
+                type="button"
+                data-copy-list-url="{% url 'goals:public_list_detail' group.plan.pk %}"
+                data-share-count-url="{% url 'goals:record_list_share' group.plan.pk %}"
+                data-share-title="{{ group.list_title }}"
+                data-share-text="{{ group.display_name }}さんのWishlyリスト「{{ group.list_title }}」"
+                aria-label="共有"
+            >
+                <svg class="share-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M4 12.5 20 4l-4.2 16-3.6-6.1L4 12.5Z"></path>
+                </svg>
+                <span class="social-count" data-share-count>{{ group.share_count|default:0 }}</span>
+                <span class="sr-only" data-copy-label>リンクをコピー</span>
+            </button>
+            <form class="social-action-form" method="post" action="{% url 'goals:toggle_saved_list' group.plan.pk %}">
+                {% csrf_token %}
+                <button class="social-icon-button bookmark-button {% if group.is_saved %}is-active{% endif %}" type="submit" aria-label="保存">
+                    <svg class="bookmark-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M6 4.75C6 3.78 6.78 3 7.75 3h8.5c.97 0 1.75.78 1.75 1.75v15.1L12 16.2l-6 3.65V4.75Z"></path>
+                    </svg>
+                    <span class="social-count">{{ group.save_count|default:0 }}</span>
+                </button>
+            </form>
+        {% else %}
+            <form class="social-action-form" method="post" action="{% url 'goals:toggle_like_list' setting.pk %}">
+                {% csrf_token %}
+                <button class="social-icon-button like-button {% if is_liked %}is-active{% endif %}" type="submit" aria-label="いいね">
+                    <span class="heart-icon">{% if is_liked %}♥{% else %}♡{% endif %}</span>
+                    <span class="social-count">{{ like_count|default:0 }}</span>
+                </button>
+            </form>
+            <button
+                class="social-icon-button share-list-button"
+                type="button"
+                data-copy-list-url="{% url 'goals:public_list_detail' setting.pk %}"
+                data-share-count-url="{% url 'goals:record_list_share' setting.pk %}"
+                data-share-title="{{ setting.list_title|default:'マイリスト' }}"
+                data-share-text="{{ setting.user.profile.display_name|default:setting.user.username }}さんのWishlyリスト「{{ setting.list_title|default:'マイリスト' }}」"
+                aria-label="共有"
+            >
+                <svg class="share-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M4 12.5 20 4l-4.2 16-3.6-6.1L4 12.5Z"></path>
+                </svg>
+                <span class="social-count" data-share-count>{{ share_count|default:0 }}</span>
+                <span class="sr-only" data-copy-label>リンクをコピー</span>
+            </button>
+            <form class="social-action-form" method="post" action="{% url 'goals:toggle_saved_list' setting.pk %}">
+                {% csrf_token %}
+                <button class="social-icon-button bookmark-button {% if is_saved %}is-active{% endif %}" type="submit" aria-label="保存">
+                    <svg class="bookmark-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M6 4.75C6 3.78 6.78 3 7.75 3h8.5c.97 0 1.75.78 1.75 1.75v15.1L12 16.2l-6 3.65V4.75Z"></path>
+                    </svg>
+                    <span class="social-count">{{ save_count|default:0 }}</span>
+                </button>
+            </form>
+        {% endif %}
+    </div>
+</section>

@@ -1,6 +1,6 @@
 {% extends "goals/base.html" %}
 
-{% block title %}{{ page_heading|default:"保存したリスト" }} - 叶えたいことリスト{% endblock %}
+{% block title %}{{ page_heading|default:"保存したリスト" }} - Wishly{% endblock %}
 
 {% block content %}
 <style>
@@ -10,7 +10,7 @@
         margin-top: 18px;
     }
     .related-page-link a {
-        color: #6a5538;
+        color: var(--app-text);
         font-weight: 700;
         text-decoration: none;
         text-underline-offset: 4px;
@@ -22,9 +22,8 @@
     }
 </style>
 
-<div class="page-title">
-    <h2>{{ page_heading|default:"保存したリスト" }}</h2>
-</div>
+{% url 'goals:my_profile' as my_profile_url %}
+{% include "goals/partials/app_form_header.html" with header_title=page_heading|default:"保存したリスト" back_url=my_profile_url back_label="← マイページへ戻る" %}
 
 <section class="discover-grid">
     {% for group in goal_groups %}
@@ -47,6 +46,6 @@
 {% endif %}
 
 <div class="related-page-link">
-    <a href="{% url 'goals:public_goal_list' %}">みんなのマイリストへ</a>
+    <a href="{% url 'goals:public_goal_list' %}">発見へ</a>
 </div>
 {% endblock %}
