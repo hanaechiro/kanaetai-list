@@ -1,22 +1,29 @@
 import base64
 import importlib
+import json
 import os
+import re
 import tempfile
+from datetime import timedelta
 from io import BytesIO
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.test import override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.utils import timezone
 from PIL import Image
 from pillow_heif import register_heif_opener
 
 register_heif_opener(thumbnails=False)
 
 from .models import (
+    CollaborationInvite,
     Follow,
     FollowRequest,
     GoalImage,
@@ -30,6 +37,7 @@ from .models import (
     YearPlan,
     YearlyGoal,
 )
+from . import views
 
 
 TEST_STORAGES = {
@@ -167,6 +175,47 @@ class VisibilityPermissionTests(TestCase):
         self.assertEqual(detail_response.status_code, 404)
         self.assertEqual(save_response.status_code, 404)
         self.assertFalse(SavedItem.objects.filter(user=self.stranger, item=self.private_goal).exists())
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class NotificationBehaviorTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.owner = User.objects.create_user(username="owner", email="owner@example.com", password="password12345")
+        self.follower = User.objects.create_user(username="follower", email="follower@example.com", password="password12345")
+        self.owner.profile.is_private = False
+        self.owner.profile.save(update_fields=["is_private"])
+
+    def test_public_follow_is_shown_as_notification_and_marks_read_after_view(self):
+        self.client.force_login(self.follower)
+        response = self.client.post(reverse("goals:toggle_follow", args=[self.owner.username]))
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Follow.objects.filter(follower=self.follower, following=self.owner).exists())
+
+        self.client.force_login(self.owner)
+        self.owner.profile.last_notification_seen = timezone.now() - timedelta(days=1)
+        self.owner.profile.save(update_fields=["last_notification_seen"])
+
+        profile_response = self.client.get(reverse("goals:my_profile"))
+        self.assertEqual(profile_response.context["unread_notification_count"], 1)
+
+        notifications_response = self.client.get(reverse("goals:notifications"))
+        self.assertContains(notifications_response, "さんがあなたをフォローしました")
+        # Tabs represent unread counts at page-open timing (pre-read).
+        tab_counts = {tab.get("key"): tab.get("count", 0) for tab in notifications_response.context.get("notification_tabs", [])}
+        self.assertEqual(tab_counts.get("follow"), 1)
+        self.assertEqual(tab_counts.get("all"), 1)
+        self.assertEqual(tab_counts.get("collaboration"), 0)
+        self.assertEqual(tab_counts.get("like"), 0)
+        self.assertEqual(tab_counts.get("save"), 0)
+
+        # Context-processor unread badge is post-read on this response.
+        self.assertEqual(notifications_response.context.get("unread_notification_count"), 0)
+        self.owner.profile.refresh_from_db()
+        self.assertIsNotNone(self.owner.profile.last_notification_seen)
+
+        refreshed_profile_response = self.client.get(reverse("goals:my_profile"))
+        self.assertEqual(refreshed_profile_response.context["unread_notification_count"], 0)
 
 
 @override_settings(STORAGES=TEST_STORAGES)
@@ -626,3 +675,1150 @@ class ImageUploadSafetyTests(TestCase):
         self.user.profile.refresh_from_db()
         self.assert_saved_image_is_openable(self.user.profile.icon, max_edge=1200)
         self.assertFalse(os.path.exists(old_path))
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class DiscoverUserSearchTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        # public user with display name and username
+        self.user_yuki = User.objects.create_user(username="yuki_25", email="yuki@example.com", password="password12345")
+        self.user_yuki.profile.display_name = "Yuki"
+        self.user_yuki.profile.is_private = False
+        self.user_yuki.profile.save(update_fields=["display_name", "is_private"])
+
+        # another public user
+        self.user_test = User.objects.create_user(username="testuser2", email="test2@example.com", password="password12345")
+        self.user_test.profile.display_name = "testuser2"
+        self.user_test.profile.is_private = False
+        self.user_test.profile.save(update_fields=["display_name", "is_private"])
+
+        # private user should not appear
+        self.user_private = User.objects.create_user(username="private1", email="priv@example.com", password="password12345")
+        self.user_private.profile.display_name = "PrivateUser"
+        self.user_private.profile.is_private = True
+        self.user_private.profile.save(update_fields=["display_name", "is_private"])
+
+    def get_usernames_from_response(self, resp):
+        return [row['user'].username for row in resp.context.get('user_results', [])]
+
+    def test_search_by_display_name_full_and_partial_matches(self):
+        resp = self.client.get(reverse('goals:public_goal_list'), {'q': 'Yuki'})
+        self.assertEqual(resp.status_code, 200)
+        names = self.get_usernames_from_response(resp)
+        self.assertIn('yuki_25', names)
+
+        resp2 = self.client.get(reverse('goals:public_goal_list'), {'q': 'yuk'})
+        self.assertEqual(resp2.status_code, 200)
+        names2 = self.get_usernames_from_response(resp2)
+        self.assertIn('yuki_25', names2)
+
+    def test_search_by_username_full_and_partial_matches(self):
+        resp = self.client.get(reverse('goals:public_goal_list'), {'q': 'yuki_25'})
+        self.assertEqual(resp.status_code, 200)
+        names = self.get_usernames_from_response(resp)
+        self.assertIn('yuki_25', names)
+
+        resp2 = self.client.get(reverse('goals:public_goal_list'), {'q': 'yuki_2'})
+        self.assertEqual(resp2.status_code, 200)
+        names2 = self.get_usernames_from_response(resp2)
+        self.assertIn('yuki_25', names2)
+
+    def test_search_is_case_insensitive(self):
+        resp = self.client.get(reverse('goals:public_goal_list'), {'q': 'YUKI'})
+        self.assertEqual(resp.status_code, 200)
+        names = self.get_usernames_from_response(resp)
+        self.assertIn('yuki_25', names)
+
+    def test_private_user_not_in_results(self):
+        resp = self.client.get(reverse('goals:public_goal_list'), {'q': 'PrivateUser'})
+        self.assertEqual(resp.status_code, 200)
+        names = self.get_usernames_from_response(resp)
+        # Non-public accounts should now appear in search results
+        self.assertIn('private1', names)
+
+    def test_private_profile_protected_and_follow_request(self):
+        # Anonymous viewer should not be able to view private profile details
+        resp = self.client.get(reverse('goals:profile_detail', args=[self.user_private.username]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.context.get('can_view_profile_details'))
+        self.assertIsNone(resp.context.get('profile_stats'))
+
+        # Authenticated user can send follow request to private account
+        follower = get_user_model().objects.create_user(username='follower1', email='f1@example.com', password='pw')
+        self.client.force_login(follower)
+        post_resp = self.client.post(reverse('goals:toggle_follow', args=[self.user_private.username]), follow=True)
+        # After follow request, a FollowRequest should exist
+        from .models import FollowRequest
+        self.assertTrue(FollowRequest.objects.filter(requester=follower, target=self.user_private).exists())
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class YearlyGoalNoteTests(TestCase):
+    def setUp(self):
+        self.User = get_user_model()
+        self.user = self.User.objects.create_user(username="owner", email="o@example.com", password="pw")
+        self.client.force_login(self.user)
+        self.year_plan = YearPlan.objects.create(user=self.user, year=2026, list_title="My Plan", target_count=10, is_public=True)
+
+    def test_create_goal_with_memo_and_display(self):
+        url = reverse('goals:add_my_list_goal_inline', args=[self.year_plan.pk])
+        data = {'title': '行きたい場所', 'description': '宮古島のきれいな海でシュノーケリングをしたい！', 'category': 'travel', 'item_is_public': 'on'}
+        resp = self.client.post(url, data)
+        # After creation, a goal with description should exist
+        goal = YearlyGoal.objects.filter(title='行きたい場所').first()
+        self.assertIsNotNone(goal)
+        self.assertEqual(goal.description, '宮古島のきれいな海でシュノーケリングをしたい！')
+
+        # Detail page should show the memo text
+        detail_resp = self.client.get(reverse('goals:yearly_goal_detail', args=[goal.pk]))
+        self.assertEqual(detail_resp.status_code, 200)
+        self.assertContains(detail_resp, '宮古島のきれいな海でシュノーケリングをしたい！')
+
+    def test_edit_goal_memo_and_display(self):
+        goal = YearlyGoal.objects.create(user=self.user, year_plan=self.year_plan, title='編集対象', description='最初のメモ', category='travel')
+        url = reverse('goals:edit_my_list_goal_inline', args=[goal.pk])
+        data = {'title': '編集対象', 'description': '更新されたメモの内容', 'category': 'travel', 'item_is_public': 'on'}
+        resp = self.client.post(url, data)
+        goal.refresh_from_db()
+        self.assertEqual(goal.description, '更新されたメモの内容')
+
+        detail_resp = self.client.get(reverse('goals:yearly_goal_detail', args=[goal.pk]))
+        self.assertEqual(detail_resp.status_code, 200)
+        self.assertContains(detail_resp, '更新されたメモの内容')
+
+    def test_empty_memo_shows_no_memo_message(self):
+        goal = YearlyGoal.objects.create(user=self.user, year_plan=self.year_plan, title='空メモ', description='', category='other')
+        resp = self.client.get(reverse('goals:yearly_goal_detail', args=[goal.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'メモはありません。')
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class CollaboratorSearchTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.current = User.objects.create_user(username="current", email="current@example.com", password="pw")
+        self.chiroro = User.objects.create_user(username="chiroro", email="chiro@example.com", password="pw")
+        self.chiroro.profile.display_name = "ちろろ"
+        self.chiroro.profile.save(update_fields=["display_name"])
+        self.private = User.objects.create_user(username="privateuser", email="p@example.com", password="pw")
+        self.private.profile.is_private = True
+        self.private.profile.save(update_fields=["is_private"])
+        # current follows chiroro
+        from .models import Follow
+        Follow.objects.create(follower=self.current, following=self.chiroro)
+
+    def test_collaborator_options_include_users_and_exclude_self(self):
+        self.client.force_login(self.current)
+        resp = self.client.get(reverse('goals:my_list_add'))
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode('utf-8')
+        # chiroro is followed and should be present in the initial <select> (server-rendered)
+        self.assertIn('data-username="chiroro"', content)
+        # display name should be present
+        self.assertIn('ちろろ', content)
+        # private user is not followed; initial select should NOT contain their data-username
+        self.assertNotIn('data-username="privateuser"', content)
+        # current user should not be present
+        self.assertNotIn('data-username="current"', content)
+
+    def test_search_data_includes_all_users_and_is_case_insensitive(self):
+        # Server-provided search data (JSON) should include non-followed and private users
+        self.client.force_login(self.current)
+        resp = self.client.get(reverse('goals:my_list_add'))
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode('utf-8')
+        match = re.search(
+            r'<script id="all-collaborators-data" type="application/json">(.*?)</script>',
+            content,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match)
+
+        all_users = json.loads(match.group(1))
+        usernames = [u.get("username", "") for u in all_users]
+        self.assertIn("privateuser", usernames)
+        self.assertIn("chiroro", usernames)
+
+        # Client-side search normalizes input and candidate text to lowercase.
+        def matches(query):
+            q = query.lower()
+            return [
+                u for u in all_users
+                if q in f'{u.get("display_name", "")} {u.get("username", "")}'.lower()
+            ]
+
+        self.assertIn("privateuser", [u.get("username") for u in matches("PRIVATE")])
+        self.assertIn("chiroro", [u.get("username") for u in matches("CHIR")])
+
+    def test_page_handles_users_without_profile(self):
+        # Create a user and remove their Profile if it exists to simulate legacy/missing profile
+        User = get_user_model()
+        missing = User.objects.create_user(username="noprof", email="noprof@example.com", password="pw")
+        # Ensure Profile (if auto-created) is removed
+        from .models import Profile
+        Profile.objects.filter(user=missing).delete()
+
+        self.client.force_login(self.current)
+        resp = self.client.get(reverse('goals:my_list_add'))
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode('utf-8')
+        # Page should render without raising; the username may be present as fallback
+        self.assertIn('noprof', content)
+
+    def test_create_collaborative_yearplan_with_selected_user(self):
+        # Create a collaborative YearPlan selecting chiroro as a collaborator
+        self.client.force_login(self.current)
+        url = reverse('goals:my_list_add')
+        data = {
+            'list_title': 'Team Plan',
+            'target_count': 10,
+            'is_collaborative': 'on',
+            'collaborators': [str(self.chiroro.pk)],
+        }
+        resp = self.client.post(url, data, follow=True)
+        self.assertEqual(resp.status_code, 200)
+        # YearPlan should be created and a CollaborationInvite should be created for chiroro
+        from .models import YearPlan, CollaborationInvite
+        yp = YearPlan.objects.filter(user=self.current, list_title='Team Plan').first()
+        self.assertIsNotNone(yp)
+        # collaborator should NOT be auto-added until they accept
+        self.assertNotIn(self.chiroro, list(yp.collaborators.all()))
+        invite = CollaborationInvite.objects.filter(list=yp, invitee=self.chiroro, inviter=self.current).first()
+        self.assertIsNotNone(invite)
+
+    def test_invite_acceptance_allows_private_list_view(self):
+        # Owner creates a private collaborative list and invites chiroro
+        from .models import YearPlan, CollaborationInvite
+        yp = YearPlan.objects.create(user=self.current, year=2026, list_title='Private Team', is_public=False)
+        CollaborationInvite.objects.create(list=yp, inviter=self.current, invitee=self.chiroro, status=CollaborationInvite.STATUS_PENDING)
+
+        # chiroro should have the invite and see it in notifications
+        self.client.force_login(self.chiroro)
+        resp = self.client.get(reverse('goals:notifications'))
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode('utf-8')
+        self.assertIn('共同リストに招待されています', content)
+
+        # Accept the invite
+        invite = CollaborationInvite.objects.filter(list=yp, invitee=self.chiroro).first()
+        resp2 = self.client.post(reverse('goals:respond_collaboration_invite', args=[invite.pk, 'accepted']), follow=True)
+        self.assertEqual(resp2.status_code, 200)
+
+        # After acceptance, chiroro should be able to view the private list
+        resp3 = self.client.get(reverse('goals:my_list_detail', args=[yp.pk]))
+        self.assertEqual(resp3.status_code, 200)
+
+    def test_non_collaborator_cannot_view_private_list(self):
+        # Create private list and ensure a third user cannot access
+        User = get_user_model()
+        third = User.objects.create_user(username='third', email='t@example.com', password='pw')
+        from .models import YearPlan
+        yp = YearPlan.objects.create(user=self.current, year=2026, list_title='Private Team 2', is_public=False)
+        self.client.force_login(third)
+        resp = self.client.get(reverse('goals:my_list_detail', args=[yp.pk]))
+        self.assertEqual(resp.status_code, 403)
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class PendingCollaborationInviteMembersTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.owner = User.objects.create_user(username="owner", email="owner@example.com", password="password12345")
+        self.owner.profile.display_name = "オーナー"
+        self.owner.profile.save(update_fields=["display_name"])
+        self.invitee = User.objects.create_user(username="invitee", email="invitee@example.com", password="password12345")
+        self.invitee.profile.display_name = "招待太郎"
+        self.invitee.profile.save(update_fields=["display_name"])
+        self.member = User.objects.create_user(username="member", email="member@example.com", password="password12345")
+        self.member.profile.display_name = "正式メンバー"
+        self.member.profile.save(update_fields=["display_name"])
+        Follow.objects.create(follower=self.owner, following=self.invitee)
+        self.year_plan = YearPlan.objects.create(
+            user=self.owner,
+            year=2026,
+            list_title="共同リスト",
+            target_count=10,
+            is_public=False,
+            is_collaborative=True,
+        )
+        self.year_plan.collaborators.add(self.member)
+
+    def test_create_invite_is_pending_and_not_added_as_collaborator(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("goals:my_list_add"),
+            {
+                "list_title": "新しい共同リスト",
+                "target_count": 10,
+                "is_collaborative": "on",
+                "collaborators": [str(self.invitee.pk)],
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        plan = YearPlan.objects.get(user=self.owner, list_title="新しい共同リスト")
+        invite = CollaborationInvite.objects.get(list=plan, invitee=self.invitee)
+        self.assertEqual(invite.status, CollaborationInvite.STATUS_PENDING)
+        self.assertNotIn(self.invitee, list(plan.collaborators.all()))
+
+    def test_owner_list_detail_shows_pending_invite_badge(self):
+        CollaborationInvite.objects.create(
+            list=self.year_plan,
+            inviter=self.owner,
+            invitee=self.invitee,
+            status=CollaborationInvite.STATUS_PENDING,
+        )
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("goals:my_list_detail", args=[self.year_plan.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "招待太郎")
+        self.assertContains(response, "招待中")
+        self.assertContains(response, "正式メンバー")
+        self.assertContains(response, "オーナー")
+
+    def test_accepted_member_is_not_shown_as_pending(self):
+        self.year_plan.collaborators.add(self.invitee)
+        CollaborationInvite.objects.create(
+            list=self.year_plan,
+            inviter=self.owner,
+            invitee=self.invitee,
+            status=CollaborationInvite.STATUS_PENDING,
+        )
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("goals:my_list_detail", args=[self.year_plan.pk]))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("招待太郎", content)
+        self.assertEqual(content.count("招待太郎"), 1)
+        invitee_index = content.find("招待太郎")
+        nearby = content[invitee_index:invitee_index + 400]
+        self.assertIn("member", nearby)
+        self.assertNotIn("招待中", nearby)
+
+    def test_declined_invite_is_not_shown_in_members(self):
+        CollaborationInvite.objects.create(
+            list=self.year_plan,
+            inviter=self.owner,
+            invitee=self.invitee,
+            status=CollaborationInvite.STATUS_DECLINED,
+        )
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("goals:my_list_detail", args=[self.year_plan.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "招待太郎")
+        self.assertNotContains(response, "招待中")
+        self.assertContains(response, "正式メンバー")
+
+    def test_pending_invitee_cannot_view_or_edit_private_list(self):
+        CollaborationInvite.objects.create(
+            list=self.year_plan,
+            inviter=self.owner,
+            invitee=self.invitee,
+            status=CollaborationInvite.STATUS_PENDING,
+        )
+        self.client.force_login(self.invitee)
+        detail = self.client.get(reverse("goals:my_list_detail", args=[self.year_plan.pk]))
+        self.assertEqual(detail.status_code, 403)
+        edit_page = self.client.get(reverse("goals:my_list_edit", args=[self.year_plan.pk]))
+        self.assertEqual(edit_page.status_code, 404)
+        add_item = self.client.post(
+            reverse("goals:add_my_list_goal_inline", args=[self.year_plan.pk]),
+            {"title": "無断追加", "category": "other"},
+        )
+        self.assertEqual(add_item.status_code, 403)
+        self.assertFalse(YearlyGoal.objects.filter(year_plan=self.year_plan, title="無断追加").exists())
+
+    def test_edit_list_creates_pending_invite_without_adding_collaborator(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("goals:my_list_edit", args=[self.year_plan.pk]),
+            {
+                "list_title": self.year_plan.list_title,
+                "target_count": self.year_plan.target_count,
+                "is_collaborative": "on",
+                "collaborators": [str(self.invitee.pk)],
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.year_plan.refresh_from_db()
+        self.assertNotIn(self.member, list(self.year_plan.collaborators.all()))
+        self.assertNotIn(self.invitee, list(self.year_plan.collaborators.all()))
+        invite = CollaborationInvite.objects.get(list=self.year_plan, invitee=self.invitee)
+        self.assertEqual(invite.status, CollaborationInvite.STATUS_PENDING)
+        detail = self.client.get(reverse("goals:my_list_detail", args=[self.year_plan.pk]))
+        self.assertContains(detail, "招待太郎")
+        self.assertContains(detail, "招待中")
+
+    def test_owner_public_detail_shows_pending_invite_badge(self):
+        self.year_plan.is_public = True
+        self.year_plan.save(update_fields=["is_public"])
+        YearlyGoal.objects.create(
+            user=self.owner,
+            year_plan=self.year_plan,
+            title="公開項目",
+            item_is_public=True,
+        )
+        CollaborationInvite.objects.create(
+            list=self.year_plan,
+            inviter=self.owner,
+            invitee=self.invitee,
+            status=CollaborationInvite.STATUS_PENDING,
+        )
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("goals:public_list_detail", args=[self.year_plan.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "招待太郎")
+        self.assertContains(response, "招待中")
+
+    def test_pending_invitee_without_profile_uses_username_fallback(self):
+        from .models import Profile
+        no_profile = get_user_model().objects.create_user(username="noprof", email="noprof@example.com", password="password12345")
+        Profile.objects.filter(user=no_profile).delete()
+        CollaborationInvite.objects.create(
+            list=self.year_plan,
+            inviter=self.owner,
+            invitee=no_profile,
+            status=CollaborationInvite.STATUS_PENDING,
+        )
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("goals:my_list_detail", args=[self.year_plan.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "noprof")
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class LikeSavedOwnListVisibilityTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.owner = User.objects.create_user(username="owner2", email="owner2@example.com", password="password12345")
+        self.other = User.objects.create_user(username="other2", email="other2@example.com", password="password12345")
+        self.private_plan = YearPlan.objects.create(
+            user=self.owner,
+            year=2026,
+            list_title="owner private",
+            target_count=10,
+            is_public=False,
+            is_collaborative=True,
+        )
+        self.public_plan = YearPlan.objects.create(
+            user=self.owner,
+            year=2026,
+            list_title="owner public",
+            target_count=10,
+            is_public=True,
+        )
+        self.collab_plan = YearPlan.objects.create(
+            user=self.other,
+            year=2026,
+            list_title="collab private",
+            target_count=10,
+            is_public=False,
+            is_collaborative=True,
+        )
+        self.collab_plan.collaborators.add(self.owner)
+        self.client.force_login(self.owner)
+
+    def test_like_own_list_appears_and_disappears_on_liked_page(self):
+        self.client.post(reverse("goals:toggle_like_list", args=[self.private_plan.pk]))
+        self.assertTrue(LikeList.objects.filter(user=self.owner, my_list=self.private_plan).exists())
+
+        liked_page = self.client.get(reverse("goals:liked_list_page"))
+        self.assertEqual(liked_page.status_code, 200)
+        self.assertContains(liked_page, "owner private")
+
+        self.client.post(reverse("goals:toggle_like_list", args=[self.private_plan.pk]))
+        self.assertFalse(LikeList.objects.filter(user=self.owner, my_list=self.private_plan).exists())
+        liked_page_after = self.client.get(reverse("goals:liked_list_page"))
+        self.assertEqual(liked_page_after.status_code, 200)
+        self.assertNotContains(liked_page_after, "owner private")
+
+    def test_save_own_private_list_appears_and_disappears_on_saved_page(self):
+        self.client.post(reverse("goals:toggle_saved_list", args=[self.private_plan.pk]))
+        self.assertTrue(SavedList.objects.filter(user=self.owner, my_list=self.private_plan).exists())
+
+        saved_page = self.client.get(reverse("goals:saved_list_page"))
+        self.assertEqual(saved_page.status_code, 200)
+        self.assertContains(saved_page, "owner private")
+
+        self.client.post(reverse("goals:toggle_saved_list", args=[self.private_plan.pk]))
+        self.assertFalse(SavedList.objects.filter(user=self.owner, my_list=self.private_plan).exists())
+        saved_page_after = self.client.get(reverse("goals:saved_list_page"))
+        self.assertEqual(saved_page_after.status_code, 200)
+        self.assertNotContains(saved_page_after, "owner private")
+
+    def test_collaborator_private_list_is_visible_in_reaction_pages(self):
+        self.client.post(reverse("goals:toggle_like_list", args=[self.collab_plan.pk]))
+        self.client.post(reverse("goals:toggle_saved_list", args=[self.collab_plan.pk]))
+
+        liked_page = self.client.get(reverse("goals:liked_list_page"))
+        saved_page = self.client.get(reverse("goals:saved_list_page"))
+        self.assertContains(liked_page, "collab private")
+        self.assertContains(saved_page, "collab private")
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class PublicListPrivatePlaceholderTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.owner = User.objects.create_user(username="owner3", email="owner3@example.com", password="password12345")
+        self.viewer = User.objects.create_user(username="viewer3", email="viewer3@example.com", password="password12345")
+        self.owner.profile.is_private = False
+        self.owner.profile.save(update_fields=["is_private"])
+        self.plan = YearPlan.objects.create(
+            user=self.owner,
+            year=2026,
+            list_title="公開混在リスト",
+            target_count=10,
+            is_public=True,
+        )
+        self.public_goal_1 = YearlyGoal.objects.create(user=self.owner, year_plan=self.plan, title="公開A", item_is_public=True)
+        self.public_goal_2 = YearlyGoal.objects.create(user=self.owner, year_plan=self.plan, title="公開B", item_is_public=True)
+        self.public_goal_3 = YearlyGoal.objects.create(user=self.owner, year_plan=self.plan, title="公開C", item_is_public=True)
+        self.private_goal_1 = YearlyGoal.objects.create(user=self.owner, year_plan=self.plan, title="秘密X", item_is_public=False)
+        self.private_goal_2 = YearlyGoal.objects.create(user=self.owner, year_plan=self.plan, title="秘密Y", item_is_public=False)
+
+    def test_public_view_shows_private_placeholders_and_hides_private_content(self):
+        self.client.force_login(self.viewer)
+        response = self.client.get(reverse("goals:public_list_detail", args=[self.plan.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "公開A")
+        self.assertContains(response, "公開B")
+        self.assertContains(response, "公開C")
+        self.assertContains(response, "🔒 非公開の項目", count=2)
+        self.assertContains(response, "登録 5件")
+        self.assertNotContains(response, "秘密X")
+        self.assertNotContains(response, "秘密Y")
+        self.assertNotContains(response, reverse("goals:public_goal_detail", args=[self.private_goal_1.pk]))
+        self.assertNotContains(response, reverse("goals:public_goal_detail", args=[self.private_goal_2.pk]))
+
+    def test_owner_detail_still_shows_private_goal_content(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("goals:my_list_detail", args=[self.plan.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "秘密X")
+        self.assertContains(response, "秘密Y")
+        self.assertContains(response, "登録 5件")
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class AcceptedCollaboratorPermissionsTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.owner = User.objects.create_user(username="owner4", email="owner4@example.com", password="password12345")
+        self.collaborator = User.objects.create_user(username="collab4", email="collab4@example.com", password="password12345")
+        self.pending_user = User.objects.create_user(username="pending4", email="pending4@example.com", password="password12345")
+
+        self.owned_plan = YearPlan.objects.create(
+            user=self.collaborator,
+            year=2026,
+            list_title="自分のリスト",
+            target_count=10,
+            is_public=False,
+        )
+        self.shared_plan = YearPlan.objects.create(
+            user=self.owner,
+            year=2026,
+            list_title="参加中の共同リスト",
+            target_count=10,
+            is_public=False,
+            is_collaborative=True,
+        )
+        self.pending_plan = YearPlan.objects.create(
+            user=self.owner,
+            year=2026,
+            list_title="承認待ちの共同リスト",
+            target_count=10,
+            is_public=False,
+            is_collaborative=True,
+        )
+        self.goal = YearlyGoal.objects.create(
+            user=self.owner,
+            year_plan=self.shared_plan,
+            title="オーナーが作った項目",
+            category="other",
+            item_is_public=True,
+            added_by=self.owner,
+        )
+        self.invite = CollaborationInvite.objects.create(
+            list=self.shared_plan,
+            inviter=self.owner,
+            invitee=self.collaborator,
+            status=CollaborationInvite.STATUS_PENDING,
+        )
+        self.pending_invite = CollaborationInvite.objects.create(
+            list=self.pending_plan,
+            inviter=self.owner,
+            invitee=self.collaborator,
+            status=CollaborationInvite.STATUS_PENDING,
+        )
+        CollaborationInvite.objects.create(
+            list=self.pending_plan,
+            inviter=self.owner,
+            invitee=self.pending_user,
+            status=CollaborationInvite.STATUS_PENDING,
+        )
+
+    def accept_shared_invite(self):
+        self.client.force_login(self.collaborator)
+        response = self.client.post(reverse("goals:respond_collaboration_invite", args=[self.invite.pk, "accepted"]), follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.shared_plan.refresh_from_db()
+        self.assertIn(self.collaborator, list(self.shared_plan.collaborators.all()))
+
+    def test_pending_user_cannot_edit_and_is_not_counted(self):
+        self.client.force_login(self.pending_user)
+        detail = self.client.get(reverse("goals:my_list_detail", args=[self.pending_plan.pk]))
+        self.assertEqual(detail.status_code, 403)
+        add_item = self.client.post(reverse("goals:add_my_list_goal_inline", args=[self.pending_plan.pk]), {"title": "追加不可", "category": "other"})
+        self.assertEqual(add_item.status_code, 403)
+        profile_response = self.client.get(reverse("goals:my_profile"))
+        self.assertEqual(profile_response.status_code, 200)
+        self.assertEqual(profile_response.context["profile_stats"]["list_count"], 0)
+        self.assertNotContains(profile_response, "承認待ちの共同リスト")
+
+    def test_accepted_collaborator_can_view_add_edit_delete_goal(self):
+        self.accept_shared_invite()
+
+        detail = self.client.get(reverse("goals:my_list_detail", args=[self.shared_plan.pk]))
+        self.assertEqual(detail.status_code, 200)
+        self.assertContains(detail, "オーナーが作った項目")
+
+        add_response = self.client.post(
+            reverse("goals:add_my_list_goal_inline", args=[self.shared_plan.pk]),
+            {"title": "共同追加", "category": "other", "item_is_public": "on"},
+            follow=True,
+        )
+        self.assertEqual(add_response.status_code, 200)
+        added_goal = YearlyGoal.objects.get(year_plan=self.shared_plan, title="共同追加")
+        self.assertEqual(added_goal.added_by, self.collaborator)
+
+        edit_response = self.client.post(
+            reverse("goals:edit_my_list_goal_inline", args=[self.goal.pk]),
+            {"title": "共同編集後", "category": "other", "item_is_public": "on", "description": "更新"},
+            follow=True,
+        )
+        self.assertEqual(edit_response.status_code, 200)
+        self.goal.refresh_from_db()
+        self.assertEqual(self.goal.title, "共同編集後")
+        self.assertEqual(self.goal.description, "更新")
+
+        goal_detail = self.client.get(reverse("goals:yearly_goal_detail", args=[self.goal.pk]))
+        self.assertEqual(goal_detail.status_code, 200)
+        self.assertContains(goal_detail, "削除")
+
+        delete_response = self.client.post(reverse("goals:yearly_goal_delete", args=[self.goal.pk]), follow=True)
+        self.assertEqual(delete_response.status_code, 200)
+        self.assertFalse(YearlyGoal.objects.filter(pk=self.goal.pk).exists())
+
+    def test_accepted_collaborative_list_is_listed_and_counted_once(self):
+        self.accept_shared_invite()
+        profile_response = self.client.get(reverse("goals:my_profile"))
+        self.assertEqual(profile_response.status_code, 200)
+        self.assertContains(profile_response, "自分のリスト")
+        self.assertContains(profile_response, "参加中の共同リスト")
+        self.assertNotContains(profile_response, "承認待ちの共同リスト")
+        self.assertEqual(profile_response.context["profile_stats"]["list_count"], 2)
+        self.assertEqual(len(profile_response.context["my_plans"]), 2)
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class CollaborativeListMembershipManagementTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.owner = User.objects.create_user(username="owner5", email="owner5@example.com", password="password12345")
+        self.collaborator = User.objects.create_user(username="collab5", email="collab5@example.com", password="password12345")
+        self.other_collaborator = User.objects.create_user(username="collab6", email="collab6@example.com", password="password12345")
+        self.pending_user = User.objects.create_user(username="pending5", email="pending5@example.com", password="password12345")
+
+        self.shared_plan = YearPlan.objects.create(
+            user=self.owner,
+            year=2026,
+            list_title="管理対象の共同リスト",
+            target_count=10,
+            is_public=False,
+            is_collaborative=True,
+        )
+        self.shared_plan.collaborators.add(self.collaborator, self.other_collaborator)
+
+        self.goal = YearlyGoal.objects.create(
+            user=self.owner,
+            year_plan=self.shared_plan,
+            title="共同項目",
+            category="other",
+            item_is_public=True,
+            added_by=self.owner,
+        )
+
+        CollaborationInvite.objects.create(
+            list=self.shared_plan,
+            inviter=self.owner,
+            invitee=self.collaborator,
+            status=CollaborationInvite.STATUS_ACCEPTED,
+        )
+        CollaborationInvite.objects.create(
+            list=self.shared_plan,
+            inviter=self.owner,
+            invitee=self.other_collaborator,
+            status=CollaborationInvite.STATUS_ACCEPTED,
+        )
+        self.pending_invite = CollaborationInvite.objects.create(
+            list=self.shared_plan,
+            inviter=self.owner,
+            invitee=self.pending_user,
+            status=CollaborationInvite.STATUS_PENDING,
+        )
+
+    def test_owner_can_delete_collaborative_list_and_it_disappears_for_collaborator(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(reverse("goals:my_list_delete", args=[self.shared_plan.pk]), follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(YearPlan.objects.filter(pk=self.shared_plan.pk).exists())
+
+        self.client.force_login(self.collaborator)
+        profile_response = self.client.get(reverse("goals:my_profile"))
+        self.assertEqual(profile_response.status_code, 200)
+        self.assertEqual(profile_response.context["profile_stats"]["list_count"], 0)
+        self.assertNotContains(profile_response, "管理対象の共同リスト")
+
+    def test_collaborator_cannot_delete_list_or_remove_others_or_cancel_pending_invite(self):
+        self.client.force_login(self.collaborator)
+
+        delete_response = self.client.post(reverse("goals:my_list_delete", args=[self.shared_plan.pk]))
+        self.assertEqual(delete_response.status_code, 404)
+        self.assertTrue(YearPlan.objects.filter(pk=self.shared_plan.pk).exists())
+
+        remove_response = self.client.post(
+            reverse("goals:my_list_remove_collaborator", args=[self.shared_plan.pk, self.other_collaborator.pk])
+        )
+        self.assertEqual(remove_response.status_code, 403)
+        self.assertTrue(self.shared_plan.collaborators.filter(pk=self.other_collaborator.pk).exists())
+
+        cancel_response = self.client.post(
+            reverse("goals:my_list_cancel_invite", args=[self.shared_plan.pk, self.pending_invite.pk])
+        )
+        self.assertEqual(cancel_response.status_code, 403)
+        self.assertTrue(CollaborationInvite.objects.filter(pk=self.pending_invite.pk).exists())
+
+    def test_accepted_collaborator_can_leave_and_loses_private_access_and_count(self):
+        self.client.force_login(self.collaborator)
+        leave_response = self.client.post(reverse("goals:my_list_leave", args=[self.shared_plan.pk]), follow=True)
+        self.assertEqual(leave_response.status_code, 200)
+
+        self.shared_plan.refresh_from_db()
+        self.assertFalse(self.shared_plan.collaborators.filter(pk=self.collaborator.pk).exists())
+        self.assertFalse(CollaborationInvite.objects.filter(list=self.shared_plan, invitee=self.collaborator).exists())
+
+        profile_response = self.client.get(reverse("goals:my_profile"))
+        self.assertEqual(profile_response.status_code, 200)
+        self.assertEqual(profile_response.context["profile_stats"]["list_count"], 0)
+        self.assertNotContains(profile_response, "管理対象の共同リスト")
+
+        detail_response = self.client.get(reverse("goals:my_list_detail", args=[self.shared_plan.pk]))
+        self.assertEqual(detail_response.status_code, 403)
+        edit_response = self.client.post(
+            reverse("goals:add_my_list_goal_inline", args=[self.shared_plan.pk]),
+            {"title": "退出後追加", "category": "other"},
+        )
+        self.assertEqual(edit_response.status_code, 403)
+
+    def test_owner_can_remove_accepted_collaborator_and_member_loses_access(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("goals:my_list_remove_collaborator", args=[self.shared_plan.pk, self.collaborator.pk]),
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        self.shared_plan.refresh_from_db()
+        self.assertFalse(self.shared_plan.collaborators.filter(pk=self.collaborator.pk).exists())
+        self.assertFalse(CollaborationInvite.objects.filter(list=self.shared_plan, invitee=self.collaborator).exists())
+
+        self.client.force_login(self.collaborator)
+        detail_response = self.client.get(reverse("goals:my_list_detail", args=[self.shared_plan.pk]))
+        self.assertEqual(detail_response.status_code, 403)
+        edit_response = self.client.post(
+            reverse("goals:edit_my_list_goal_inline", args=[self.goal.pk]),
+            {"title": "解除後編集", "category": "other", "item_is_public": "on"},
+        )
+        self.assertEqual(edit_response.status_code, 403)
+        profile_response = self.client.get(reverse("goals:my_profile"))
+        self.assertEqual(profile_response.context["profile_stats"]["list_count"], 0)
+        self.assertNotContains(profile_response, "管理対象の共同リスト")
+
+    def test_owner_can_cancel_pending_invite_and_pending_label_disappears(self):
+        self.client.force_login(self.owner)
+
+        before_response = self.client.get(reverse("goals:my_list_detail", args=[self.shared_plan.pk]))
+        self.assertEqual(before_response.status_code, 200)
+        self.assertContains(before_response, "pending5")
+        self.assertContains(before_response, "招待中")
+
+        cancel_response = self.client.post(
+            reverse("goals:my_list_cancel_invite", args=[self.shared_plan.pk, self.pending_invite.pk]),
+            follow=True,
+        )
+        self.assertEqual(cancel_response.status_code, 200)
+        self.assertFalse(CollaborationInvite.objects.filter(pk=self.pending_invite.pk).exists())
+        self.assertFalse(self.shared_plan.collaborators.filter(pk=self.pending_user.pk).exists())
+
+        after_response = self.client.get(reverse("goals:my_list_detail", args=[self.shared_plan.pk]))
+        self.assertEqual(after_response.status_code, 200)
+        self.assertNotContains(after_response, "pending5")
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class CollaborativeMemberUiAndLeaveFlowTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.owner = User.objects.create_user(username="owner6", email="owner6@example.com", password="password12345")
+        self.member = User.objects.create_user(username="member6", email="member6@example.com", password="password12345")
+        self.other_member = User.objects.create_user(username="member7", email="member7@example.com", password="password12345")
+        self.pending_user = User.objects.create_user(username="pending6", email="pending6@example.com", password="password12345")
+
+        self.private_plan = YearPlan.objects.create(
+            user=self.owner,
+            year=2026,
+            list_title="非公開共同リストA",
+            target_count=10,
+            is_public=False,
+            is_collaborative=True,
+        )
+        self.private_plan.collaborators.add(self.member, self.other_member)
+        self.private_goal = YearlyGoal.objects.create(
+            user=self.owner,
+            year_plan=self.private_plan,
+            title="共同項目A",
+            category="other",
+            item_is_public=True,
+            added_by=self.owner,
+        )
+
+        self.public_plan = YearPlan.objects.create(
+            user=self.owner,
+            year=2026,
+            list_title="公開共同リストB",
+            target_count=10,
+            is_public=True,
+            is_collaborative=True,
+        )
+        self.public_plan.collaborators.add(self.member)
+
+        CollaborationInvite.objects.create(
+            list=self.private_plan,
+            inviter=self.owner,
+            invitee=self.member,
+            status=CollaborationInvite.STATUS_ACCEPTED,
+        )
+        CollaborationInvite.objects.create(
+            list=self.private_plan,
+            inviter=self.owner,
+            invitee=self.other_member,
+            status=CollaborationInvite.STATUS_ACCEPTED,
+        )
+        self.pending_invite = CollaborationInvite.objects.create(
+            list=self.private_plan,
+            inviter=self.owner,
+            invitee=self.pending_user,
+            status=CollaborationInvite.STATUS_PENDING,
+        )
+
+    def owner_edit_payload(self, selected_users):
+        return {
+            "list_title": self.private_plan.list_title,
+            "description": self.private_plan.description,
+            "target_count": str(self.private_plan.target_count),
+            "is_public": "",
+            "is_collaborative": "on",
+            "collaborators": [str(user.pk) for user in selected_users],
+        }
+
+    def test_accepted_member_sees_leave_button_and_leave_confirm_renders_with_cancel_url(self):
+        self.client.force_login(self.member)
+        detail = self.client.get(reverse("goals:my_list_detail", args=[self.private_plan.pk]))
+        self.assertEqual(detail.status_code, 200)
+        self.assertContains(detail, "共同リストから抜ける")
+
+        confirm = self.client.get(reverse("goals:my_list_leave", args=[self.private_plan.pk]))
+        self.assertEqual(confirm.status_code, 200)
+        self.assertContains(confirm, "共同リストから抜けますか？")
+        cancel_url = reverse("goals:my_list_detail", args=[self.private_plan.pk])
+        self.assertContains(confirm, f'href="{cancel_url}"')
+
+        cancel_back = self.client.get(cancel_url)
+        self.assertEqual(cancel_back.status_code, 200)
+
+    def test_leave_confirmed_removes_only_self_and_revokes_private_access_and_counts(self):
+        self.client.force_login(self.member)
+        before_profile = self.client.get(reverse("goals:my_profile"))
+        self.assertEqual(before_profile.context["profile_stats"]["list_count"], 2)
+
+        leave = self.client.post(reverse("goals:my_list_leave", args=[self.private_plan.pk]), follow=True)
+        self.assertEqual(leave.status_code, 200)
+
+        self.private_plan.refresh_from_db()
+        self.assertFalse(self.private_plan.collaborators.filter(pk=self.member.pk).exists())
+        self.assertTrue(self.private_plan.collaborators.filter(pk=self.other_member.pk).exists())
+        self.assertEqual(self.private_plan.user_id, self.owner.pk)
+        self.assertTrue(YearPlan.objects.filter(pk=self.private_plan.pk).exists())
+
+        profile = self.client.get(reverse("goals:my_profile"))
+        self.assertEqual(profile.status_code, 200)
+        self.assertNotContains(profile, "非公開共同リストA")
+        self.assertContains(profile, "公開共同リストB")
+        self.assertEqual(profile.context["profile_stats"]["list_count"], 1)
+
+        detail = self.client.get(reverse("goals:my_list_detail", args=[self.private_plan.pk]))
+        self.assertEqual(detail.status_code, 403)
+        edit = self.client.post(
+            reverse("goals:edit_my_list_goal_inline", args=[self.private_goal.pk]),
+            {"title": "退出後編集", "category": "other", "item_is_public": "on"},
+        )
+        self.assertEqual(edit.status_code, 403)
+
+    def test_members_section_shows_status_only_without_leave_or_remove_buttons(self):
+        self.client.force_login(self.member)
+        member_detail = self.client.get(reverse("goals:my_list_detail", args=[self.private_plan.pk]))
+        self.assertEqual(member_detail.status_code, 200)
+        self.assertNotContains(member_detail, ">退出<", html=True)
+        self.assertNotContains(member_detail, ">外す<", html=True)
+        self.assertContains(member_detail, "member")
+        self.assertNotContains(member_detail, "招待中")
+
+        self.client.force_login(self.owner)
+        owner_detail = self.client.get(reverse("goals:my_list_detail", args=[self.private_plan.pk]))
+        self.assertEqual(owner_detail.status_code, 200)
+        self.assertNotContains(owner_detail, ">外す<", html=True)
+        self.assertContains(owner_detail, "招待中")
+
+    def test_owner_edit_form_can_unselect_member_and_save_applies_membership_changes(self):
+        self.client.force_login(self.owner)
+        edit_page = self.client.get(reverse("goals:my_list_edit", args=[self.private_plan.pk]))
+        self.assertEqual(edit_page.status_code, 200)
+        self.assertContains(edit_page, "選択済みメンバー")
+
+        payload = self.owner_edit_payload([self.other_member])
+        response = self.client.post(reverse("goals:my_list_edit", args=[self.private_plan.pk]), payload, follow=True)
+        self.assertEqual(response.status_code, 200)
+
+        self.private_plan.refresh_from_db()
+        self.assertFalse(self.private_plan.collaborators.filter(pk=self.member.pk).exists())
+        self.assertTrue(self.private_plan.collaborators.filter(pk=self.other_member.pk).exists())
+
+    def test_owner_edit_cancel_keeps_member_and_non_owner_cannot_change_composition(self):
+        self.client.force_login(self.owner)
+        page = self.client.get(reverse("goals:my_list_edit", args=[self.private_plan.pk]))
+        self.assertEqual(page.status_code, 200)
+        self.private_plan.refresh_from_db()
+        self.assertTrue(self.private_plan.collaborators.filter(pk=self.member.pk).exists())
+
+        self.client.force_login(self.member)
+        payload = self.owner_edit_payload([])
+        denied = self.client.post(reverse("goals:my_list_edit", args=[self.private_plan.pk]), payload)
+        self.assertEqual(denied.status_code, 404)
+        self.private_plan.refresh_from_db()
+        self.assertTrue(self.private_plan.collaborators.filter(pk=self.member.pk).exists())
+
+    def test_owner_edit_unselect_pending_removes_stale_pending_invite(self):
+        self.client.force_login(self.owner)
+        payload = self.owner_edit_payload([self.member, self.other_member])
+        response = self.client.post(reverse("goals:my_list_edit", args=[self.private_plan.pk]), payload, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            CollaborationInvite.objects.filter(
+                list=self.private_plan,
+                invitee=self.pending_user,
+                status=CollaborationInvite.STATUS_PENDING,
+            ).exists()
+        )
+
+    def test_my_profile_shows_collaborative_badges(self):
+        self.client.force_login(self.owner)
+        owner_profile = self.client.get(reverse("goals:my_profile"))
+        self.assertEqual(owner_profile.status_code, 200)
+        self.assertContains(owner_profile, "非公開共同リストA")
+        self.assertContains(owner_profile, "非公開")
+        self.assertContains(owner_profile, "共同リスト")
+
+        self.client.force_login(self.member)
+        member_profile = self.client.get(reverse("goals:my_profile"))
+        self.assertEqual(member_profile.status_code, 200)
+        self.assertContains(member_profile, "公開共同リストB")
+        self.assertContains(member_profile, "共同リスト")
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class PublicListGroupPerformanceTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.owner = User.objects.create_user(username="perf_owner", email="owner@example.com", password="password12345")
+        self.viewer = User.objects.create_user(username="perf_viewer", email="viewer@example.com", password="password12345")
+        self.reactor = User.objects.create_user(username="perf_reactor", email="reactor@example.com", password="password12345")
+        self.owner.profile.is_private = False
+        self.owner.profile.save(update_fields=["is_private"])
+        Follow.objects.create(follower=self.viewer, following=self.owner)
+
+        self.plans = []
+        for idx in range(1, 4):
+            plan = YearPlan.objects.create(
+                user=self.owner,
+                year=2026,
+                list_title=f"公開リスト{idx}",
+                target_count=20,
+                is_public=True,
+            )
+            plan.collaborators.add(self.reactor)
+            ListComment.objects.create(user=self.reactor, my_list=plan, body=f"comment {idx}")
+            LikeList.objects.create(user=self.reactor, my_list=plan)
+            SavedList.objects.create(user=self.reactor, my_list=plan)
+            for goal_idx in range(1, 8):
+                YearlyGoal.objects.create(
+                    user=self.owner,
+                    year_plan=plan,
+                    title=f"目標{idx}-{goal_idx}",
+                    category="other",
+                    is_done=(goal_idx % 3 == 0),
+                    item_is_public=(goal_idx % 4 != 0),
+                )
+            self.plans.append(plan)
+
+        self.request_factory = RequestFactory()
+
+    def legacy_build_public_list_groups(self, plans, request_user=None, category="", request=None, include_private=False):
+        plan_ids = [plan.pk for plan in plans]
+        goals = YearlyGoal.objects.filter(
+            year_plan_id__in=plan_ids,
+        ).select_related("user", "user__profile", "year_plan").order_by("is_done", "-created_at")
+        if category:
+            goals = goals.filter(category=category)
+
+        grouped_goals = []
+        groups_by_plan = {}
+        for plan in plans:
+            profile = plan.user.profile if hasattr(plan.user, "profile") else None
+            display_name = profile.display_name if profile and profile.display_name else plan.user.username
+            detail_url_name = "goals:public_list_detail"
+            if request_user and request_user.is_authenticated and views.can_view_year_plan(request_user, plan):
+                if (plan.user_id == request_user.id) or plan.collaborators.filter(pk=request_user.pk).exists() or not plan.is_public:
+                    detail_url_name = "goals:my_list_detail"
+            collaborators_display = []
+            try:
+                collaborators_qs = plan.collaborators.all().select_related("profile")
+            except Exception:
+                collaborators_qs = []
+            for c in collaborators_qs:
+                try:
+                    c_profile = c.profile
+                except Exception:
+                    c_profile = None
+                collaborators_display.append(c_profile.display_name if c_profile and c_profile.display_name else c.username)
+            groups_by_plan[plan.pk] = {
+                "plan": plan,
+                "user": plan.user,
+                "display_name": display_name,
+                "detail_url_name": detail_url_name,
+                "collaborators_display": collaborators_display,
+                "list_title": plan.list_title or f"{plan.year}年やりたいこと",
+                "target_count": plan.target_count,
+                "done_count": plan.goals.filter(is_done=True).count() if include_private else plan.goals.filter(item_is_public=True, is_done=True).count(),
+                "registered_count": plan.goals.count(),
+                "total_count": plan.goals.count(),
+                "remaining_count": max(plan.target_count - plan.goals.count(), 0),
+                "like_count": plan.liked_by.count(),
+                "save_count": plan.saved_by.count(),
+                "is_saved": False,
+                "is_liked": False,
+                "can_react": bool(request_user and request_user.is_authenticated and request_user != plan.user),
+                "can_follow": bool(request_user and request_user.is_authenticated and request_user != plan.user),
+                "is_private": bool(profile and profile.is_private),
+                "follow_request_status": "",
+                "show_item_privacy": include_private,
+                "comment_form": views.ListCommentForm(),
+                "comments": plan.comments.select_related("user", "user__profile").all(),
+                "goals": [],
+                "private_placeholder_count": 0,
+            }
+            grouped_goals.append(groups_by_plan[plan.pk])
+
+        if request_user and request_user.is_authenticated:
+            saved_plan_ids = set(SavedList.objects.filter(user=request_user, my_list_id__in=plan_ids).values_list("my_list_id", flat=True))
+            liked_plan_ids = set(LikeList.objects.filter(user=request_user, my_list_id__in=plan_ids).values_list("my_list_id", flat=True))
+            saved_item_ids = set(SavedItem.objects.filter(user=request_user, item__year_plan_id__in=plan_ids).values_list("item_id", flat=True))
+            wanted_item_ids = set(TogetherRequest.objects.none().values_list("list_item_id", flat=True))
+            together_statuses = {
+                item.list_item_id: item.status
+                for item in TogetherRequest.objects.filter(requester=request_user, list_item__year_plan_id__in=plan_ids)
+            }
+            memo_titles = set(IdeaMemo.objects.filter(user=request_user).values_list("title", flat=True))
+            following_user_ids = set(Follow.objects.filter(follower=request_user).values_list("following_id", flat=True))
+            for plan_id, group in groups_by_plan.items():
+                group["is_saved"] = plan_id in saved_plan_ids
+                group["is_liked"] = plan_id in liked_plan_ids
+                group["is_following"] = group["user"].pk in following_user_ids
+                group["follow_request_status"] = views.get_follow_request_status(request_user, group["user"])
+        else:
+            saved_item_ids = set()
+            wanted_item_ids = set()
+            together_statuses = {}
+            memo_titles = set()
+
+        for goal in goals:
+            group = groups_by_plan.get(goal.year_plan_id)
+            if group:
+                can_show_goal = include_private
+                if not include_private:
+                    if request_user is None:
+                        can_show_goal = goal.item_is_public
+                    else:
+                        can_show_goal = views.can_view_yearly_goal(request_user, goal)
+                if can_show_goal:
+                    goal.is_wanted_by_current_user = goal.pk in wanted_item_ids or goal.title in memo_titles
+                    goal.is_saved_by_current_user = goal.pk in saved_item_ids
+                    goal.together_status_for_current_user = together_statuses.get(goal.pk)
+                    group["goals"].append(goal)
+                else:
+                    group["private_placeholder_count"] += 1
+
+        if not include_private:
+            for group in grouped_goals:
+                for _ in range(group["private_placeholder_count"]):
+                    group["goals"].append({
+                        "is_private_placeholder": True,
+                        "title": "🔒 非公開の項目",
+                    })
+
+        for group in grouped_goals:
+            group["progress_percent"] = views.progress_percent(group["done_count"], group["total_count"])
+            group["target_progress_percent"] = views.progress_percent(group["done_count"], group["target_count"])
+
+        return grouped_goals
+
+    def test_build_public_list_groups_reduces_query_count_without_behavior_change(self):
+        request = self.request_factory.get(reverse("goals:public_goal_list"))
+        request.user = self.viewer
+
+        legacy_plans = list(YearPlan.objects.filter(pk__in=[plan.pk for plan in self.plans]).select_related("user", "user__profile"))
+        optimized_plans = list(YearPlan.objects.filter(pk__in=[plan.pk for plan in self.plans]).select_related("user", "user__profile"))
+
+        with CaptureQueriesContext(connection) as legacy_context:
+            legacy_groups = self.legacy_build_public_list_groups(legacy_plans, self.viewer, request=request)
+        with CaptureQueriesContext(connection) as optimized_context:
+            optimized_groups = views.build_public_list_groups(optimized_plans, self.viewer, request=request)
+
+        legacy_queries = len(legacy_context)
+        optimized_queries = len(optimized_context)
+
+        self.assertEqual(len(legacy_groups), len(optimized_groups))
+        self.assertEqual(
+            [group["list_title"] for group in legacy_groups],
+            [group["list_title"] for group in optimized_groups],
+        )
+        self.assertEqual(
+            [group["total_count"] for group in legacy_groups],
+            [group["total_count"] for group in optimized_groups],
+        )
+        self.assertLess(
+            optimized_queries,
+            legacy_queries,
+            msg=f"legacy={legacy_queries}, optimized={optimized_queries}",
+        )

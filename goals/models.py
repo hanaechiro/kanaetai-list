@@ -65,6 +65,7 @@ class Profile(models.Model):
 
     email_verified = models.BooleanField("Email verified", default=False)
     is_private = models.BooleanField("鍵アカウント", default=True)
+    last_notification_seen = models.DateTimeField("最後に通知を確認した日時", null=True, blank=True)
 
     def __str__(self):
         return self.display_name or self.user.username

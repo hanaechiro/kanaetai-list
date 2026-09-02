@@ -1,3 +1,14 @@
+{% if goal.is_private_placeholder %}
+<div class="list-item-row notebook-goal-row public-goal-row note-line">
+    <span class="app-checkbox is-readonly" aria-hidden="true"></span>
+    <div class="notebook-goal-main public-goal-main">
+        <div class="notebook-goal-primary public-goal-primary">
+            <span class="notebook-goal-title public-goal-title">{{ goal.title }}</span>
+            <span class="status-pill private">項目非公開</span>
+        </div>
+    </div>
+</div>
+{% else %}
 {% if can_delete_goal %}
 <div class="list-item-swipe-shell" data-swipe-delete-shell>
     <div class="list-item-swipe-action" aria-hidden="true">
@@ -84,4 +95,5 @@
 </div>
 {% if can_delete_goal %}
 </div>
+{% endif %}
 {% endif %}

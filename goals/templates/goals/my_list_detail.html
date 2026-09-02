@@ -18,6 +18,11 @@
     .detail-top-nav .detail-actions {
         margin-left: auto;
     }
+    .detail-top-nav .danger-lite-action {
+        border-color: #d8d8d2;
+        background: #f7f7f5;
+        color: #37352f;
+    }
     .public-list-section {
         margin-top: 0;
     }
@@ -39,6 +44,10 @@
                 <a class="button pill-button secondary-button danger settings-button" href="{% url 'goals:my_list_delete' setting.pk %}">&#21066;&#38500;</a>
                 <a class="button pill-button primary-button settings-button" href="{% url 'goals:my_list_edit' setting.pk %}">&#32232;&#38598;</a>
             </div>
+        {% elif can_leave_list %}
+            <div class="detail-actions list-detail-owner-actions">
+                <a class="button pill-button secondary-button settings-button danger-lite-action" href="{% url 'goals:my_list_leave' setting.pk %}">共同リストから抜ける</a>
+            </div>
         {% endif %}
     </div>
 
@@ -59,7 +68,7 @@
         </header>
         <div class="goal-list-shell">
             {% for goal in goals %}
-                {% include "goals/partials/yearly_notebook_goal.html" with goal=goal can_delete_goal=can_manage_list %}
+                {% include "goals/partials/yearly_notebook_goal.html" with goal=goal can_delete_goal=can_edit_items %}
             {% empty %}
                 <p class="notice empty-list-note">&#38917;&#30446;&#12399;&#12414;&#12384;&#12354;&#12426;&#12414;&#12379;&#12435;&#12290;</p>
             {% endfor %}

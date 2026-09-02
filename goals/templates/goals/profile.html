@@ -74,6 +74,34 @@
     }
     .profile-menu-arrow { color: var(--app-muted, #787774); }
     .menu-label-with-badge { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+
+    /* Notification badge: red circular badge with white number. */
+    .notification-badge {
+        display: inline-grid;
+        height: 18px;
+        min-width: 18px;
+        padding: 0 6px;
+        place-items: center;
+        border-radius: 999px;
+        background: #FF0000; /* unified clear red */
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1;
+        box-sizing: border-box;
+    }
+    /* Force true circle for single-digit counts */
+    .notification-badge.is-single-digit {
+        width: 18px;
+        padding: 0;
+    }
+    /* Position badge overlapping the menu trigger (left-top) without blocking clicks */
+    .menu-trigger .notification-badge {
+        position: absolute;
+        top: -6px;
+        left: -6px;
+        pointer-events: none;
+    }
     .profile-card { position: relative; border: 1px solid var(--app-border, #e5e5e5); border-radius: 8px; background: #fff; padding: 18px; box-shadow: 0 8px 18px rgba(0,0,0,0.04); }
     .profile-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: center; }
     .profile-avatar-main { display: inline-flex; align-items: center; justify-content: center; width: 84px; height: 84px; border-radius: 50%; background: #f4f1ec; color: var(--app-text, #37352f); font-size: 30px; font-weight: 700; overflow: hidden; }
@@ -149,19 +177,22 @@
         <details class="profile-page-menu">
             <summary class="menu-trigger" aria-label="メニュー">
                 ...
-                {% if unread_notification_count %}<span class="notification-badge">{{ unread_notification_count|default:0 }}</span>{% endif %}
+                {% if unread_notification_count %}
+                    <span class="notification-badge {% if unread_notification_count < 10 %}is-single-digit{% endif %}">{{ unread_notification_count }}</span>
+                {% endif %}
             </summary>
             <div class="profile-menu">
                 <div class="profile-menu-group">
                     <a class="profile-menu-item" href="{% url 'goals:edit_profile' %}"><span>プロフィール編集</span><span class="profile-menu-arrow">&gt;</span></a>
                     <button class="profile-menu-item" type="button" data-share-profile data-share-url="{{ profile_share_url }}"><span>プロフィールをシェア</span></button>
                     <a class="profile-menu-item" href="{% url 'goals:notifications' %}">
-                        <span class="menu-label-with-badge"><span>通知</span>{% if unread_notification_count %}<span class="notification-badge">{{ unread_notification_count }}</span>{% endif %}</span>
+                        <span class="menu-label-with-badge"><span>通知</span>{% if unread_notification_count %}<span class="notification-badge {% if unread_notification_count < 10 %}is-single-digit{% endif %}">{{ unread_notification_count }}</span>{% endif %}</span>
                         <span class="profile-menu-arrow">&gt;</span>
                     </a>
                     <a class="profile-menu-item" href="{% url 'goals:account_settings' %}"><span>アカウント設定</span><span class="profile-menu-arrow">&gt;</span></a>
                 </div>
                 <div class="profile-menu-group">
+                    <a class="profile-menu-item" href="{% url 'goals:liked_list_page' %}"><span>いいねしたリスト</span><span class="profile-menu-arrow">&gt;</span></a>
                     <a class="profile-menu-item" href="{% url 'goals:saved_list_page' %}"><span>保存したリスト</span><span class="profile-menu-arrow">&gt;</span></a>
                     <a class="profile-menu-item" href="{% url 'goals:saved_item_page' %}"><span>保存した項目</span><span class="profile-menu-arrow">&gt;</span></a>
                     <a class="profile-menu-item" href="{% url 'goals:idea_memo_list' %}"><span>思いつきメモ</span><span class="profile-menu-arrow">&gt;</span></a>
@@ -235,6 +266,7 @@
                                 <h4>{{ plan.list_title|default:"マイリスト" }}</h4>
                                 <span class="profile-list-badges">
                                     {% if not plan.is_public %}<span class="profile-list-badge">非公開</span>{% endif %}
+                                    {% if plan.is_collaborative %}<span class="profile-list-badge">共同リスト</span>{% endif %}
                                     {% if plan.is_target_completed %}<span class="profile-list-badge">達成済み</span>{% endif %}
                                 </span>
                             </div>

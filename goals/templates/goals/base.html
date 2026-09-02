@@ -4002,7 +4002,7 @@
             <span class="nav-label">テンプレート</span>
         </a>
         {% if user.is_authenticated %}
-            <a class="{% if request.resolver_match.url_name == 'my_profile' or request.resolver_match.url_name == 'edit_profile' or request.resolver_match.url_name == 'account_settings' or request.resolver_match.url_name == 'privacy_settings' or request.resolver_match.url_name == 'notifications' or request.resolver_match.url_name == 'saved_list_page' or request.resolver_match.url_name == 'saved_item_page' %}is-active{% endif %}" href="{% url 'goals:my_profile' %}">
+            <a class="{% if request.resolver_match.url_name == 'my_profile' or request.resolver_match.url_name == 'edit_profile' or request.resolver_match.url_name == 'account_settings' or request.resolver_match.url_name == 'privacy_settings' or request.resolver_match.url_name == 'notifications' or request.resolver_match.url_name == 'liked_list_page' or request.resolver_match.url_name == 'saved_list_page' or request.resolver_match.url_name == 'saved_item_page' %}is-active{% endif %}" href="{% url 'goals:my_profile' %}">
                 <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"></circle><path d="M4.5 20a7.5 7.5 0 0 1 15 0"></path></svg></span>
                 <span class="nav-label">マイページ</span>
             </a>

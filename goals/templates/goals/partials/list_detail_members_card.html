@@ -22,6 +22,14 @@
                         <span class="status-pill">member</span>
                     </div>
                 {% endfor %}
+                {% if pending_invitees %}
+                    {% for invitee in pending_invitees %}
+                        <div class="member-row">
+                            <p class="member-name">{{ invitee.display_name }}</p>
+                            <span class="status-pill private">招待中</span>
+                        </div>
+                    {% endfor %}
+                {% endif %}
             {% else %}
                 <div class="member-row">
                     <p class="member-name">{{ setting.user.profile.display_name|default:setting.user.username }}</p>
@@ -33,10 +41,10 @@
                         <span class="status-pill">member</span>
                     </div>
                 {% endfor %}
-                {% if can_manage_list and collaboration_invites %}
-                    {% for invite in collaboration_invites %}
+                {% if can_manage_list and pending_invitees %}
+                    {% for invitee in pending_invitees %}
                         <div class="member-row">
-                            <p class="member-name">{{ invite.invitee.profile.display_name|default:invite.invitee.username }}</p>
+                            <p class="member-name">{{ invitee.display_name }}</p>
                             <span class="status-pill private">招待中</span>
                         </div>
                     {% endfor %}

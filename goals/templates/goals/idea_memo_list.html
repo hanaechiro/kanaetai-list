@@ -66,6 +66,11 @@
             min-width: 50px;
             padding-inline: 10px;
         }
+        /* Keep header title and primary action on the same row for mobile */
+        .idea-page > .app-form-header {
+            grid-template-columns: minmax(0, 1fr) auto !important;
+            align-items: center !important;
+        }
     }
 </style>
 

@@ -175,12 +175,24 @@ class CollaboratorSelectMultiple(forms.SelectMultiple):
         if value:
             user = getattr(value, "instance", None)
             if user is None:
-                user = self.choices.queryset.filter(pk=value).select_related("profile").first()
+                user = self.choices.queryset.filter(pk=value).first()
             if user:
-                display_name = user.profile.display_name or user.username
+                # Guard against users that do not have a Profile instance.
+                try:
+                    profile = user.profile
+                except Exception:
+                    profile = None
+
+                display_name = (getattr(profile, "display_name", None) or user.username)
                 option["attrs"]["data-display-name"] = display_name
                 option["attrs"]["data-username"] = user.username
-                option["attrs"]["data-avatar"] = user.profile.icon.url if user.profile.icon else ""
+                avatar = ""
+                if profile is not None and getattr(profile, "icon", None):
+                    try:
+                        avatar = profile.icon.url or ""
+                    except Exception:
+                        avatar = ""
+                option["attrs"]["data-avatar"] = avatar
                 option["attrs"]["data-initial"] = (display_name or user.username or "?").strip()[:1]
         return option
 
@@ -230,15 +242,39 @@ class YearPlanForm(forms.ModelForm):
         if user is None or not user.is_authenticated:
             self.fields["collaborators"].queryset = get_user_model().objects.none()
             return
+
+        # Initial candidate list (what the server renders into the <select>)
+        # should be only users that the current user is following (excluding self).
+        # This keeps the initial UI focused and small. The full user list for
+        # search is provided separately to the template as JSON by the view.
+        from .models import Follow
+
         following_ids = Follow.objects.filter(follower=user).values_list("following_id", flat=True)
-        follower_ids = Follow.objects.filter(following=user).values_list("follower_id", flat=True)
+        allowed_ids = set(following_ids)
+        instance = getattr(self, "instance", None)
+        if instance and instance.pk:
+            allowed_ids.update(instance.collaborators.values_list("pk", flat=True))
+            pending_ids = CollaborationInvite.objects.filter(
+                list=instance,
+                status=CollaborationInvite.STATUS_PENDING,
+            ).values_list("invitee_id", flat=True)
+            allowed_ids.update(pending_ids)
+
         self.fields["collaborators"].queryset = (
-            get_user_model().objects.filter(Q(pk__in=following_ids) | Q(pk__in=follower_ids))
-            .exclude(pk=user.pk)
-            .select_related("profile")
+            get_user_model().objects.filter(Q(pk__in=following_ids) | Q(pk__in=allowed_ids)).exclude(pk=user.pk)
             .distinct()
             .order_by("username")
         )
+
+        if instance and instance.pk and not self.is_bound:
+            preselected_ids = list(instance.collaborators.values_list("pk", flat=True))
+            preselected_ids.extend(
+                CollaborationInvite.objects.filter(
+                    list=instance,
+                    status=CollaborationInvite.STATUS_PENDING,
+                ).values_list("invitee_id", flat=True)
+            )
+            self.initial["collaborators"] = list(dict.fromkeys(preselected_ids))
 
 
 
@@ -273,9 +309,11 @@ class SignUpForm(UserCreationForm):
         max_length=NAME_MAX_LENGTH,
         help_text="15文字以内。絵文字も使用できます。",
         widget=forms.TextInput(attrs={
-            "autocomplete": "name",
+            "autocomplete": "off",
+            "autocapitalize": "off",
+            "spellcheck": "false",
             "maxlength": NAME_MAX_LENGTH,
-            "placeholder": "ゆうか🎀",
+            "placeholder": "",
         }),
     )
     username = forms.CharField(
@@ -283,9 +321,11 @@ class SignUpForm(UserCreationForm):
         max_length=USERNAME_MAX_LENGTH,
         help_text="15文字以内の半角英数字と _ が使用できます。アルファベットを1文字以上含めてください。",
         widget=forms.TextInput(attrs={
-            "autocomplete": "username",
+            "autocomplete": "off",
+            "autocapitalize": "off",
+            "spellcheck": "false",
             "maxlength": USERNAME_MAX_LENGTH,
-            "placeholder": "yuuka_25",
+            "placeholder": "",
         }),
     )
     email = forms.EmailField(

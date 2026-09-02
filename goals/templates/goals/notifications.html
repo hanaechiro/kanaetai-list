@@ -56,14 +56,16 @@
         height: 18px;
         place-items: center;
         border-radius: 999px;
-        background: #f7f7f5;
-        color: #787774;
+        background: #FF0000; /* unified clear red */
+        color: #FFFFFF;
         font-size: 11px;
-        padding: 0 5px;
+        padding: 0 6px;
+        box-sizing: border-box;
+        font-weight: 700;
     }
     .notification-tab.is-active .notification-tab-count {
-        background: rgba(255, 255, 255, 0.18);
-        color: #fff;
+        background: #FF0000;
+        color: #FFFFFF;
     }
     .notification-stack {
         display: grid;
@@ -76,6 +78,15 @@
         padding: 16px;
         display: grid;
         gap: 10px;
+    }
+    .notification-new-dot {
+        width: 10px;
+        height: 10px;
+        background: #FF0000;
+        border-radius: 999px;
+        display: inline-block;
+        margin-right: 8px;
+        vertical-align: middle;
     }
     .notification-card h3 {
         margin: 0;
@@ -141,29 +152,53 @@
     <div class="notification-stack">
         {% if notification_category == "all" or notification_category == "follow" %}
             <section class="notification-card">
-                <h3>フォロー申請</h3>
-                {% for item in follow_requests %}
+                <h3>フォロー</h3>
+                {% for item in follow_notifications %}
                     <div class="notification-row">
-                        <a class="avatar" href="{% url 'goals:profile_detail' item.requester.username %}">
-                            {% if item.requester.profile.icon %}
-                                <img src="{{ item.requester.profile.icon.url }}" alt="">
+                        <a class="avatar" href="{% url 'goals:profile_detail' item.actor.username %}">
+                            {% if item.avatar %}
+                                <img src="{{ item.avatar }}" alt="">
                             {% else %}
-                                {{ item.requester.profile.display_name|default:item.requester.username|slice:":1" }}
+                                {{ item.display_name|slice:":1" }}
                             {% endif %}
                         </a>
                         <div>
                             <p>
-                                <a class="notification-target-link" href="{% url 'goals:profile_detail' item.requester.username %}">
-                                    {{ item.requester.profile.display_name|default:item.requester.username }}さん
+                                {% if item.is_new %}
+                                    <span class="notification-new-dot" aria-hidden="true"></span>
+                                {% endif %}
+                                <a class="notification-target-link" href="{% url 'goals:profile_detail' item.actor.username %}">
+                                    {{ item.display_name }}さんがあなたをフォローしました。
                                 </a>
-                                からフォロー申請が届いています。プロフィールを確認して、承認または却下できます。
+                            </p>
+                            <p class="meta">{{ item.obj.created_at|date:"Y/m/d H:i" }}</p>
+                        </div>
+                    </div>
+                {% endfor %}
+                {% for item in follow_requests %}
+                    <div class="notification-row">
+                        <a class="avatar" href="{% url 'goals:profile_detail' item.actor.username %}">
+                            {% if item.avatar %}
+                                <img src="{{ item.avatar }}" alt="">
+                            {% else %}
+                                {{ item.display_name|slice:":1" }}
+                            {% endif %}
+                        </a>
+                        <div>
+                            <p>
+                                {% if item.is_new %}
+                                    <span class="notification-new-dot" aria-hidden="true"></span>
+                                {% endif %}
+                                <a class="notification-target-link" href="{% url 'goals:profile_detail' item.actor.username %}">
+                                    {{ item.display_name }}さんからフォロー申請が届いています。プロフィールを確認して、承認または却下できます。
+                                </a>
                             </p>
                             <div class="notification-actions">
-                                <form method="post" action="{% url 'goals:respond_follow_request' item.pk 'accepted' %}">
+                                <form method="post" action="{% url 'goals:respond_follow_request' item.obj.pk 'accepted' %}">
                                     {% csrf_token %}
                                     <button class="button small-button primary-button" type="submit">承認する</button>
                                 </form>
-                                <form method="post" action="{% url 'goals:respond_follow_request' item.pk 'rejected' %}">
+                                <form method="post" action="{% url 'goals:respond_follow_request' item.obj.pk 'rejected' %}">
                                     {% csrf_token %}
                                     <button class="button small-button secondary-button" type="submit">却下する</button>
                                 </form>
@@ -171,7 +206,9 @@
                         </div>
                     </div>
                 {% empty %}
-                    <p class="meta">未対応のフォロー申請はありません。</p>
+                    {% if not follow_notifications %}
+                        <p class="meta">未対応のフォロー申請やフォロー通知はありません。</p>
+                    {% endif %}
                 {% endfor %}
             </section>
         {% endif %}
@@ -181,27 +218,30 @@
                 <h3>共同リスト招待</h3>
                 {% for invite in collaboration_invites %}
                     <div class="notification-row">
-                        <a class="avatar" href="{% url 'goals:profile_detail' invite.inviter.username %}">
-                            {% if invite.inviter.profile.icon %}
-                                <img src="{{ invite.inviter.profile.icon.url }}" alt="">
+                        <a class="avatar" href="{% url 'goals:profile_detail' invite.actor.username %}">
+                            {% if invite.avatar %}
+                                <img src="{{ invite.avatar }}" alt="">
                             {% else %}
-                                {{ invite.inviter.profile.display_name|default:invite.inviter.username|slice:":1" }}
+                                {{ invite.display_name|slice:":1" }}
                             {% endif %}
                         </a>
                         <div>
                             <p>
-                                {{ invite.inviter.profile.display_name|default:invite.inviter.username }}さんから
-                                <a class="notification-target-link" href="{% url 'goals:my_list_detail' invite.list.pk %}">
-                                    「{{ invite.list.list_title|default:"マイリスト" }}」
+                                {% if invite.is_new %}
+                                    <span class="notification-new-dot" aria-hidden="true"></span>
+                                {% endif %}
+                                {{ invite.display_name }}さんから
+                                <a class="notification-target-link" href="{% url 'goals:my_list_detail' invite.invite.list.pk %}">
+                                    「{{ invite.invite.list.list_title|default:"マイリスト" }}"
                                 </a>
                                 の共同リストに招待されています。参加前でもリスト内容を確認できます。
                             </p>
                             <div class="notification-actions">
-                                <form method="post" action="{% url 'goals:respond_collaboration_invite' invite.pk 'accepted' %}">
+                                <form method="post" action="{% url 'goals:respond_collaboration_invite' invite.invite.pk 'accepted' %}">
                                     {% csrf_token %}
                                     <button class="button small-button primary-button" type="submit">参加する</button>
                                 </form>
-                                <form method="post" action="{% url 'goals:respond_collaboration_invite' invite.pk 'declined' %}">
+                                <form method="post" action="{% url 'goals:respond_collaboration_invite' invite.invite.pk 'declined' %}">
                                     {% csrf_token %}
                                     <button class="button small-button secondary-button" type="submit">拒否する</button>
                                 </form>
@@ -219,25 +259,33 @@
                 <h3>いいね</h3>
                 {% for item in like_notifications %}
                     <div class="notification-row">
-                        <a class="avatar" href="{% url 'goals:profile_detail' item.user.username %}">
-                            {% if item.user.profile.icon %}
-                                <img src="{{ item.user.profile.icon.url }}" alt="">
+                        {% if item.actor and item.actor.username %}
+                            <a class="avatar" href="{% url 'goals:profile_detail' item.actor.username %}">
+                        {% else %}
+                            <div class="avatar">
+                        {% endif %}
+                            {% if item.avatar %}
+                                <img src="{{ item.avatar }}" alt="">
                             {% else %}
-                                {{ item.user.profile.display_name|default:item.user.username|slice:":1" }}
+                                {{ item.display_name|slice:":1" }}
                             {% endif %}
-                        </a>
+                        {% if item.actor and item.actor.username %}
+                            </a>
+                        {% else %}
+                            </div>
+                        {% endif %}
                         <div>
                             <p>
-                                <a class="notification-target-link" href="{% url 'goals:profile_detail' item.user.username %}">
-                                    {{ item.user.profile.display_name|default:item.user.username }}さん
-                                </a>
+                                {% if item.actor and item.actor.username %}
+                                    <a class="notification-target-link" href="{% url 'goals:profile_detail' item.actor.username %}">{{ item.display_name }}さん</a>
+                                {% else %}
+                                    <span class="notification-target-link">{{ item.display_name }}さん</span>
+                                {% endif %}
                                 が
-                                <a class="notification-target-link" href="{% url 'goals:my_list_detail' item.my_list.pk %}">
-                                    「{{ item.my_list.list_title|default:"マイリスト" }}」
-                                </a>
+                                <a class="notification-target-link" href="{% url 'goals:my_list_detail' item.like.my_list.pk %}">"{{ item.like.my_list.list_title|default:"マイリスト" }}"</a>
                                 にいいねしました。
                             </p>
-                            <p class="meta">{{ item.created_at|date:"Y/m/d H:i" }}</p>
+                            <p class="meta">{{ item.like.created_at|date:"Y/m/d H:i" }}</p>
                         </div>
                     </div>
                 {% empty %}
@@ -251,25 +299,33 @@
                 <h3>保存</h3>
                 {% for item in save_notifications %}
                     <div class="notification-row">
-                        <a class="avatar" href="{% url 'goals:profile_detail' item.user.username %}">
-                            {% if item.user.profile.icon %}
-                                <img src="{{ item.user.profile.icon.url }}" alt="">
+                        {% if item.actor and item.actor.username %}
+                            <a class="avatar" href="{% url 'goals:profile_detail' item.actor.username %}">
+                        {% else %}
+                            <div class="avatar">
+                        {% endif %}
+                            {% if item.avatar %}
+                                <img src="{{ item.avatar }}" alt="">
                             {% else %}
-                                {{ item.user.profile.display_name|default:item.user.username|slice:":1" }}
+                                {{ item.display_name|slice:":1" }}
                             {% endif %}
-                        </a>
+                        {% if item.actor and item.actor.username %}
+                            </a>
+                        {% else %}
+                            </div>
+                        {% endif %}
                         <div>
                             <p>
-                                <a class="notification-target-link" href="{% url 'goals:profile_detail' item.user.username %}">
-                                    {{ item.user.profile.display_name|default:item.user.username }}さん
-                                </a>
+                                {% if item.actor and item.actor.username %}
+                                    <a class="notification-target-link" href="{% url 'goals:profile_detail' item.actor.username %}">{{ item.display_name }}さん</a>
+                                {% else %}
+                                    <span class="notification-target-link">{{ item.display_name }}さん</span>
+                                {% endif %}
                                 が
-                                <a class="notification-target-link" href="{% url 'goals:my_list_detail' item.my_list.pk %}">
-                                    「{{ item.my_list.list_title|default:"マイリスト" }}」
-                                </a>
+                                <a class="notification-target-link" href="{% url 'goals:my_list_detail' item.save.my_list.pk %}">"{{ item.save.my_list.list_title|default:"マイリスト" }}"</a>
                                 を保存しました。
                             </p>
-                            <p class="meta">{{ item.created_at|date:"Y/m/d H:i" }}</p>
+                            <p class="meta">{{ item.save.created_at|date:"Y/m/d H:i" }}</p>
                         </div>
                     </div>
                 {% empty %}

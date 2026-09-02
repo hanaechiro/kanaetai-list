@@ -273,7 +273,7 @@
 
 {% include "goals/partials/app_form_header.html" with header_title=title back_url=cancel_url back_label=form_back_label cancel_url=cancel_url save_form_id="main-form" %}
 
-<form id="main-form" class="form-box" method="post" enctype="multipart/form-data" novalidate>
+<form id="main-form" class="form-box" method="post" enctype="multipart/form-data" novalidate {% if disable_autocomplete %}autocomplete="off" autocapitalize="off" spellcheck="false"{% endif %}>
     {% csrf_token %}
     {% if form.errors %}
         <div class="form-error-alert" role="alert">
@@ -306,6 +306,9 @@
                         <div class="selected-collaborators" data-selected-collaborators></div>
                     </div>
                 </div>
+                {% if all_collaborators_data %}
+                    {{ all_collaborators_data|json_script:"all-collaborators-data" }}
+                {% endif %}
             {% elif field.field.widget.input_type == "checkbox" %}
                 <label class="checkbox-label" for="{{ field.id_for_label }}">
                     {{ field }}
@@ -435,20 +438,46 @@
         const results = collaboratorField.querySelector("[data-collaborator-results]");
         const selectedBox = collaboratorField.querySelector("[data-selected-collaborators]");
         const options = Array.from(collaboratorSelect.options).map((option) => {
-            const label = option.textContent.trim();
-            const usernameMatch = label.match(/\(@(.+)\)$/);
-            const username = usernameMatch ? usernameMatch[1] : "";
-            const displayName = usernameMatch ? label.replace(/\s*\(@.+\)$/, "") : label;
+            // Prefer data attributes injected by server-side widget; fall back to option text.
+            const dataDisplay = option.getAttribute("data-display-name");
+            const dataUsername = option.getAttribute("data-username");
+            const dataInitial = option.getAttribute("data-initial");
+            const label = (dataDisplay || option.textContent || "").trim();
+            const username = (dataUsername || "").trim();
+            const displayName = dataDisplay ? dataDisplay : (label || "");
             return {
                 option,
                 id: option.value,
                 label,
                 displayName,
                 username,
-                initial: (displayName || username || "?").trim().charAt(0),
-                keyword: label.toLowerCase(),
+                initial: (dataInitial || (displayName || username || "?").trim().charAt(0)),
+                keyword: ((displayName || "") + " " + (username || "")).toLowerCase(),
             };
         });
+
+        // Load full user data for search when query is present. These entries
+        // are not represented as <option> initially to avoid showing a large
+        // candidate list; they will be materialized into the <select> if the
+        // user chooses them.
+        let allUsers = [];
+        const allScript = document.getElementById("all-collaborators-data");
+        if (allScript) {
+            try {
+                const parsed = JSON.parse(allScript.textContent || "[]");
+                allUsers = parsed.map((u) => ({
+                    option: null,
+                    id: String(u.id),
+                    label: (u.display_name || u.username || "").trim(),
+                    displayName: (u.display_name || u.username || "").trim(),
+                    username: (u.username || "").trim(),
+                    initial: ((u.display_name || u.username || "?").trim().charAt(0)),
+                    keyword: ((u.display_name || "") + " " + (u.username || "")).toLowerCase(),
+                }));
+            } catch (e) {
+                allUsers = [];
+            }
+        }
 
         const selectedIds = () => new Set(options.filter((item) => item.option.selected).map((item) => item.id));
 
@@ -482,9 +511,18 @@
         const renderResults = () => {
             const query = (searchInput.value || "").trim().toLowerCase();
             const selected = selectedIds();
-            const matches = options
-                .filter((item) => !query || item.keyword.includes(query))
-                .slice(0, 12);
+            // If query is empty, only show the server-rendered options (followers).
+            // If query exists, search across all users.
+            const pool = query ? options.concat(allUsers) : options;
+            // Deduplicate by id, prefer option-backed entries.
+            const seen = new Set();
+            const merged = [];
+            for (const item of pool) {
+                if (seen.has(item.id)) continue;
+                seen.add(item.id);
+                merged.push(item);
+            }
+            const matches = merged.filter((item) => !query || item.keyword.includes(query)).slice(0, 12);
             results.innerHTML = "";
             if (!matches.length) {
                 const empty = document.createElement("span");
@@ -507,7 +545,19 @@
                 `;
                 button.addEventListener("click", () => {
                     if (!selected.has(item.id)) {
-                        item.option.selected = true;
+                        if (!item.option) {
+                            // Materialize an <option> for this user so it can be selected.
+                            const opt = document.createElement("option");
+                            opt.value = item.id;
+                            opt.textContent = item.displayName || item.username || item.id;
+                            opt.setAttribute("data-display-name", item.displayName || "");
+                            opt.setAttribute("data-username", item.username || "");
+                            collaboratorSelect.appendChild(opt);
+                            // Update options array and link option
+                            item.option = opt;
+                            options.push(item);
+                        }
+                        try { item.option.selected = true; } catch (e) {}
                     }
                     render();
                 });

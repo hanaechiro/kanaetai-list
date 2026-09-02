@@ -1,6 +1,6 @@
 {% extends "goals/base.html" %}
 
-{% block title %}削除確認 - 叶えたいことリスト{% endblock %}
+{% block title %}{{ confirm_title|default:"削除確認" }} - 叶えたいことリスト{% endblock %}
 
 {% block content %}
 <style>
@@ -28,16 +28,30 @@
 </style>
 
 <div class="page-title">
-    <h2>削除しますか？</h2>
+    <h2>{{ confirm_title|default:"削除しますか？" }}</h2>
 </div>
 
 <form class="form-box" method="post">
     {% csrf_token %}
-    <p>「{{ object }}」を削除します。</p>
-    <p class="meta">マイリストを削除する場合、そのリストに紐づく項目も削除されます。</p>
+    {% if confirm_message %}
+        <p>{{ confirm_message }}</p>
+    {% else %}
+        <p>「{{ object }}」を削除します。</p>
+    {% endif %}
+    {% if confirm_meta %}
+        <p class="meta">{{ confirm_meta }}</p>
+    {% else %}
+        <p class="meta">マイリストを削除する場合、そのリストに紐づく項目も削除されます。</p>
+    {% endif %}
     <div class="delete-actions">
-        <a class="button secondary-button" href="{{ cancel_url }}">キャンセル</a>
-        <button class="button primary-button" type="submit">削除する</button>
+        {% if confirm_cancel_url %}
+            <a class="button secondary-button" href="{{ confirm_cancel_url }}">キャンセル</a>
+        {% elif cancel_url %}
+            <a class="button secondary-button" href="{{ cancel_url }}">キャンセル</a>
+        {% else %}
+            <a class="button secondary-button" href="{% url 'goals:yearly_goal_list' %}">キャンセル</a>
+        {% endif %}
+        <button class="button primary-button" type="submit">{{ confirm_submit_label|default:"削除する" }}</button>
     </div>
 </form>
 {% endblock %}

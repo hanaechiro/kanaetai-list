@@ -11,6 +11,7 @@ from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError
 from django.http import HttpResponse, JsonResponse
 from django.db.models import Count, F, Max, Q, Sum
+from django.db.models.query import prefetch_related_objects
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -899,6 +900,10 @@ def can_edit_year_plan_items(user, plan):
     return user.is_authenticated and (plan.user_id == user.id or plan.collaborators.filter(pk=user.pk).exists())
 
 
+def can_leave_year_plan(user, plan):
+    return user.is_authenticated and plan.user_id != user.id and plan.collaborators.filter(pk=user.pk).exists()
+
+
 def can_view_account_details(viewer, owner):
     if viewer.is_authenticated and viewer.pk == owner.pk:
         return True
@@ -922,6 +927,34 @@ def can_view_year_plan(viewer, plan):
 
 def can_view_list(viewer, plan):
     return can_view_year_plan(viewer, plan)
+
+
+def pending_invitees_for_plan(plan):
+    collaborator_ids = plan.collaborators.values_list("pk", flat=True)
+    invites = CollaborationInvite.objects.filter(
+        list=plan,
+        status=CollaborationInvite.STATUS_PENDING,
+    ).exclude(invitee_id__in=collaborator_ids).select_related("invitee")
+    rows = []
+    for invite in invites:
+        invitee = invite.invitee
+        try:
+            profile = invitee.profile
+        except Exception:
+            profile = None
+        display_name = (getattr(profile, "display_name", None) or invitee.username)
+        rows.append({"user": invitee, "display_name": display_name, "invite": invite})
+    return rows
+
+
+def build_confirm_action_context(*, title, message, submit_label, cancel_url, meta=""):
+    return {
+        "confirm_title": title,
+        "confirm_message": message,
+        "confirm_submit_label": submit_label,
+        "confirm_cancel_url": cancel_url,
+        "confirm_meta": meta,
+    }
 
 
 def can_view_yearly_goal(viewer, goal):
@@ -960,24 +993,58 @@ def get_follow_request_status(requester, target):
 
 
 def build_user_row(user, request_user):
-    profile = Profile.objects.get_or_create(user=user, defaults={"display_name": user.username})[0]
-    can_view_details = can_view_profile(request_user, user)
-    is_following = False
-    follow_request_status = ""
-    if request_user and request_user.is_authenticated and request_user != user:
-        is_following = Follow.objects.filter(follower=request_user, following=user).exists()
-        follow_request_status = get_follow_request_status(request_user, user)
-    return {
-        "user": user,
-        "profile": profile,
-        "display_name": profile.display_name or user.username,
-        "followers_count": Follow.objects.filter(following=user).count(),
-        "can_follow": bool(request_user and request_user.is_authenticated and request_user != user),
-        "is_following": is_following,
-        "follow_request_status": follow_request_status,
-        "is_private": profile.is_private,
-        "can_view_profile_details": can_view_details,
-    }
+    rows = build_user_rows([user], request_user)
+    return rows[0] if rows else {}
+
+
+def build_user_rows(users, request_user):
+    users = list(users)
+    if not users:
+        return []
+
+    user_ids = [user.pk for user in users]
+    followers_count_map = dict(
+        Follow.objects.filter(following_id__in=user_ids)
+        .values("following_id")
+        .annotate(count=Count("id"))
+        .values_list("following_id", "count")
+    )
+
+    is_authenticated = bool(request_user and request_user.is_authenticated)
+    following_user_ids = set()
+    follow_request_statuses = {}
+    if is_authenticated:
+        following_user_ids = set(
+            Follow.objects.filter(follower=request_user, following_id__in=user_ids)
+            .values_list("following_id", flat=True)
+        )
+        latest_follow_requests = (
+            FollowRequest.objects.filter(requester=request_user, target_id__in=user_ids)
+            .order_by("target_id", "-updated_at")
+            .values("target_id", "status")
+        )
+        for row in latest_follow_requests:
+            follow_request_statuses.setdefault(row["target_id"], row["status"])
+
+    rows = []
+    for user in users:
+        try:
+            profile = user.profile
+        except Exception:
+            profile = Profile.objects.get_or_create(user=user, defaults={"display_name": user.username})[0]
+        can_follow = bool(is_authenticated and request_user != user)
+        rows.append({
+            "user": user,
+            "profile": profile,
+            "display_name": profile.display_name or user.username,
+            "followers_count": followers_count_map.get(user.pk, 0),
+            "can_follow": can_follow,
+            "is_following": can_follow and user.pk in following_user_ids,
+            "follow_request_status": follow_request_statuses.get(user.pk, "") if can_follow else "",
+            "is_private": profile.is_private,
+            "can_view_profile_details": can_view_profile(request_user, user),
+        })
+    return rows
 
 
 def can_edit_yearly_goal(user, goal):
@@ -1032,8 +1099,12 @@ def profile_stats(user, viewer=None):
         return None
     public_plans = YearPlan.objects.filter(user=user, is_public=True)
     goals = YearlyGoal.objects.filter(user=user)
+    is_own_profile = getattr(viewer, "pk", None) == user.pk
+    list_count_qs = YearPlan.objects.filter(user=user)
+    if is_own_profile:
+        list_count_qs = YearPlan.objects.filter(Q(user=user) | Q(collaborators=user)).distinct()
     return {
-        "list_count": YearPlan.objects.filter(user=user).count(),
+        "list_count": list_count_qs.count(),
         "public_list_count": public_plans.count(),
         "done_item_count": goals.filter(is_done=True).count(),
         "liked_count": LikeList.objects.filter(my_list__user=user).count(),
@@ -1269,6 +1340,7 @@ def signup(request):
         "form": form,
         "title": "新規登録",
         "cancel_url": reverse_lazy("goals:home"),
+        "disable_autocomplete": True,
     })
 
 
@@ -1283,7 +1355,7 @@ def my_profile(request):
     if list_filter not in {"all", "active", "completed"}:
         list_filter = "all"
 
-    my_plans = YearPlan.objects.filter(user=request.user).annotate(
+    my_plans = YearPlan.objects.filter(Q(user=request.user) | Q(collaborators=request.user)).distinct().annotate(
         goals_count=Count("goals"),
         goals_done_count=Count("goals", filter=Q(goals__is_done=True)),
     ).order_by("-updated_at", "-pk")
@@ -1425,27 +1497,122 @@ def privacy_settings(request):
     return render(request, "goals/privacy_settings.html", {"form": form, "profile": profile})
 
 
+def get_unread_notification_count(user):
+    if not user or not user.is_authenticated:
+        return 0
+
+    profile, _ = Profile.objects.get_or_create(user=user, defaults={"display_name": user.username})
+    last_seen = profile.last_notification_seen
+
+    follow_request_count = FollowRequest.objects.filter(target=user, status=FollowRequest.STATUS_PENDING)
+    collaboration_invite_count = CollaborationInvite.objects.filter(invitee=user, status=CollaborationInvite.STATUS_PENDING)
+    new_follow_count = Follow.objects.filter(following=user).exclude(follower=user)
+    like_notification_count = LikeList.objects.filter(my_list__user=user).exclude(user=user)
+    save_notification_count = SavedList.objects.filter(my_list__user=user).exclude(user=user)
+
+    if last_seen:
+        follow_request_count = follow_request_count.filter(created_at__gt=last_seen)
+        collaboration_invite_count = collaboration_invite_count.filter(created_at__gt=last_seen)
+        new_follow_count = new_follow_count.filter(created_at__gt=last_seen)
+        like_notification_count = like_notification_count.filter(created_at__gt=last_seen)
+        save_notification_count = save_notification_count.filter(created_at__gt=last_seen)
+
+    return (
+        follow_request_count.count()
+        + collaboration_invite_count.count()
+        + new_follow_count.count()
+        + like_notification_count.count()
+        + save_notification_count.count()
+    )
+
+
+def mark_notifications_read(user):
+    if not user or not user.is_authenticated:
+        return
+    profile, _ = Profile.objects.get_or_create(user=user, defaults={"display_name": user.username})
+    profile.last_notification_seen = timezone.now()
+    profile.save(update_fields=["last_notification_seen"])
+
+
 @login_required
 def notifications_page(request):
     category = request.GET.get("category", "all")
     valid_categories = {"all", "follow", "collaboration", "like", "save"}
     if category not in valid_categories:
         category = "all"
-    follow_requests = FollowRequest.objects.filter(target=request.user, status=FollowRequest.STATUS_PENDING).select_related("requester", "requester__profile")
-    collaboration_invites = CollaborationInvite.objects.filter(invitee=request.user, status=CollaborationInvite.STATUS_PENDING).select_related("inviter", "inviter__profile", "list")
-    like_notifications = LikeList.objects.filter(my_list__user=request.user).exclude(user=request.user).select_related("user", "user__profile", "my_list").order_by("-created_at")[:20]
-    save_notifications = SavedList.objects.filter(my_list__user=request.user).exclude(user=request.user).select_related("user", "user__profile", "my_list").order_by("-created_at")[:20]
+    # Compute previous last_seen to determine which notifications are new.
+    profile, _ = Profile.objects.get_or_create(user=request.user, defaults={"display_name": request.user.username})
+    last_seen_old = profile.last_notification_seen
+
+    follow_requests_qs = FollowRequest.objects.filter(target=request.user, status=FollowRequest.STATUS_PENDING).select_related("requester", "requester__profile").order_by("-created_at")
+    follow_notifications_all_qs = Follow.objects.filter(following=request.user).exclude(follower=request.user).select_related("follower", "follower__profile").order_by("-created_at")
+    follow_notifications_qs = follow_notifications_all_qs[:20]
+    collaboration_invites_qs = CollaborationInvite.objects.filter(invitee=request.user, status=CollaborationInvite.STATUS_PENDING).select_related("inviter", "inviter__profile", "list").order_by("-created_at")
+    like_notifications_all_qs = LikeList.objects.filter(my_list__user=request.user).exclude(user=request.user).select_related("user", "user__profile", "my_list").order_by("-created_at")
+    like_notifications_qs = like_notifications_all_qs[:20]
+    save_notifications_all_qs = SavedList.objects.filter(my_list__user=request.user).exclude(user=request.user).select_related("user", "user__profile", "my_list").order_by("-created_at")
+    save_notifications_qs = save_notifications_all_qs[:20]
+
+    def map_item(obj, actor_attr_name="requester"):
+        # Returns a dict with safe display values and is_new flag
+        actor = getattr(obj, actor_attr_name, None)
+        display_name = None
+        avatar = ""
+        try:
+            profile_obj = actor.profile
+        except Exception:
+            profile_obj = None
+        display_name = getattr(profile_obj, "display_name", None) or getattr(actor, "username", "")
+        if profile_obj is not None and getattr(profile_obj, "icon", None):
+            try:
+                avatar = profile_obj.icon.url or ""
+            except Exception:
+                avatar = ""
+        return {
+            "obj": obj,
+            "actor": actor,
+            "display_name": display_name,
+            "avatar": avatar,
+            "is_new": (last_seen_old is None) or (getattr(obj, "created_at", None) and obj.created_at > last_seen_old),
+        }
+
+    follow_requests = [map_item(r, "requester") for r in follow_requests_qs]
+    follow_notifications = [map_item(n, "follower") for n in follow_notifications_qs]
+    collaboration_invites = [map_item(i, "inviter") | {"invite": i} for i in collaboration_invites_qs]
+    like_notifications = [map_item(l, "user") | {"like": l} for l in like_notifications_qs]
+    save_notifications = [map_item(s, "user") | {"save": s} for s in save_notifications_qs]
+
+    # Compute pre-read (initial) unread counts based on last_seen_old so the UI
+    # can show which categories had unread items when the page was opened.
+    follow_requests_new_qs = follow_requests_qs.filter(created_at__gt=last_seen_old) if last_seen_old else follow_requests_qs
+    follow_notifications_new_qs = follow_notifications_all_qs.filter(created_at__gt=last_seen_old) if last_seen_old else follow_notifications_all_qs
+    collaboration_new_qs = collaboration_invites_qs.filter(created_at__gt=last_seen_old) if last_seen_old else collaboration_invites_qs
+    like_new_qs = like_notifications_all_qs.filter(created_at__gt=last_seen_old) if last_seen_old else like_notifications_all_qs
+    save_new_qs = save_notifications_all_qs.filter(created_at__gt=last_seen_old) if last_seen_old else save_notifications_all_qs
+
+    follow_request_count_pre = follow_requests_new_qs.count()
+    follow_count_pre = follow_notifications_new_qs.count()
+    collaboration_count_pre = collaboration_new_qs.count()
+    like_count_pre = like_new_qs.count()
+    save_count_pre = save_new_qs.count()
+
+    total_follow_pre = follow_request_count_pre + follow_count_pre
     tabs = [
-        {"key": "all", "label": "すべて", "count": follow_requests.count() + collaboration_invites.count()},
-        {"key": "follow", "label": "フォロー", "count": follow_requests.count()},
-        {"key": "collaboration", "label": "共同リスト", "count": collaboration_invites.count()},
-        {"key": "like", "label": "いいね", "count": like_notifications.count() if hasattr(like_notifications, "count") else 0},
-        {"key": "save", "label": "保存", "count": save_notifications.count() if hasattr(save_notifications, "count") else 0},
+        {"key": "all", "label": "すべて", "count": total_follow_pre + collaboration_count_pre + like_count_pre + save_count_pre},
+        {"key": "follow", "label": "フォロー", "count": total_follow_pre},
+        {"key": "collaboration", "label": "共同リスト", "count": collaboration_count_pre},
+        {"key": "like", "label": "いいね", "count": like_count_pre},
+        {"key": "save", "label": "保存", "count": save_count_pre},
     ]
+
+    # Now mark notifications read (so subsequent loads show post-read counts)
+    mark_notifications_read(request.user)
+
     return render(request, "goals/notifications.html", {
         "notification_category": category,
         "notification_tabs": tabs,
         "follow_requests": follow_requests,
+        "follow_notifications": follow_notifications,
         "collaboration_invites": collaboration_invites,
         "like_notifications": like_notifications,
         "save_notifications": save_notifications,
@@ -1488,6 +1655,102 @@ def respond_collaboration_invite(request, pk, status):
     else:
         raise PermissionDenied
     return redirect(request.META.get("HTTP_REFERER") or reverse("goals:notifications"))
+
+
+@login_required
+def leave_collaboration_year_plan(request, pk):
+    plan = get_object_or_404(YearPlan.objects.select_related("user", "user__profile").prefetch_related("collaborators"), pk=pk)
+    if not plan.is_collaborative or not can_leave_year_plan(request.user, plan):
+        raise PermissionDenied
+
+    if request.method == "POST":
+        plan.collaborators.remove(request.user)
+        CollaborationInvite.objects.filter(list=plan, invitee=request.user).delete()
+        touch_year_plan(plan)
+        messages.success(request, "共同リストから抜けました。")
+        return redirect("goals:my_profile")
+
+    return render(request, "goals/confirm_delete.html", {
+        "object": plan,
+        **build_confirm_action_context(
+            title="共同リストから抜けますか？",
+            message=f"「{plan}」から抜けると、自分のマイリストから外れます。",
+            submit_label="抜ける",
+            cancel_url=reverse("goals:my_list_detail", kwargs={"pk": plan.pk}),
+            meta="リスト自体や他のメンバーには影響しません。非公開リストの場合、退出後は閲覧や編集ができなくなります。",
+        ),
+    })
+
+
+@login_required
+def remove_year_plan_collaborator(request, pk, user_pk):
+    plan = get_object_or_404(YearPlan.objects.select_related("user").prefetch_related("collaborators"), pk=pk)
+    if not plan.is_collaborative or not can_manage_year_plan(request.user, plan):
+        raise PermissionDenied
+
+    collaborator = get_object_or_404(get_user_model(), pk=user_pk)
+    if collaborator.pk == plan.user_id or not plan.collaborators.filter(pk=collaborator.pk).exists():
+        raise PermissionDenied
+
+    try:
+        profile = collaborator.profile
+    except Exception:
+        profile = None
+    display_name = getattr(profile, "display_name", None) or collaborator.username
+
+    if request.method == "POST":
+        plan.collaborators.remove(collaborator)
+        CollaborationInvite.objects.filter(list=plan, invitee=collaborator).delete()
+        touch_year_plan(plan)
+        messages.success(request, f"{display_name}さんを共同リストから外しました。")
+        return redirect("goals:my_list_detail", pk=plan.pk)
+
+    return render(request, "goals/confirm_delete.html", {
+        "object": plan,
+        **build_confirm_action_context(
+            title="メンバーを外しますか？",
+            message=f"{display_name}さんを「{plan}」の共同メンバーから外します。",
+            submit_label="外す",
+            cancel_url=reverse("goals:my_list_detail", kwargs={"pk": plan.pk}),
+            meta="解除されたメンバーはマイリスト一覧から外れ、非公開リストの場合は閲覧や編集ができなくなります。",
+        ),
+    })
+
+
+@login_required
+def cancel_year_plan_invite(request, pk, invite_pk):
+    plan = get_object_or_404(YearPlan.objects.select_related("user"), pk=pk)
+    if not plan.is_collaborative or not can_manage_year_plan(request.user, plan):
+        raise PermissionDenied
+
+    invite = get_object_or_404(
+        CollaborationInvite.objects.select_related("invitee"),
+        pk=invite_pk,
+        list=plan,
+        status=CollaborationInvite.STATUS_PENDING,
+    )
+    try:
+        profile = invite.invitee.profile
+    except Exception:
+        profile = None
+    display_name = getattr(profile, "display_name", None) or invite.invitee.username
+
+    if request.method == "POST":
+        invite.delete()
+        touch_year_plan(plan)
+        messages.success(request, f"{display_name}さんへの招待を取り消しました。")
+        return redirect("goals:my_list_detail", pk=plan.pk)
+
+    return render(request, "goals/confirm_delete.html", {
+        "object": plan,
+        **build_confirm_action_context(
+            title="招待を取り消しますか？",
+            message=f"{display_name}さんへの共同リスト招待を取り消します。",
+            submit_label="招待を取り消す",
+            cancel_url=reverse("goals:my_list_detail", kwargs={"pk": plan.pk}),
+            meta="このユーザーは正式メンバーには追加されず、招待中表示からも消えます。",
+        ),
+    })
 
 
 def profile_detail(request, username):
@@ -1584,7 +1847,19 @@ def my_list_detail(request, pk):
             raise PermissionDenied
         setting_form = YearPlanForm(request.POST, instance=year_plan)
         if setting_form.is_valid():
-            setting_form.save()
+            # Save fields but handle collaborators as invites rather than direct adds.
+            collaborators = setting_form.cleaned_data.get("collaborators") or []
+            instance = setting_form.save(commit=False)
+            instance.save()
+            # Create CollaborationInvite for newly selected users
+            from .models import CollaborationInvite
+            for u in collaborators:
+                if u.pk == request.user.pk:
+                    continue
+                if not instance.collaborators.filter(pk=u.pk).exists():
+                    CollaborationInvite.objects.update_or_create(
+                        list=instance, invitee=u, defaults={"inviter": request.user, "status": CollaborationInvite.STATUS_PENDING}
+                    )
             messages.success(request, "マイリスト設定を保存しました。")
             return redirect("goals:my_list_detail", pk=year_plan.pk)
     else:
@@ -1599,7 +1874,7 @@ def my_list_detail(request, pk):
     done_count = all_goals.filter(is_done=True).count()
     total_count = all_goals.count()
     year_plan.progress_percent = progress_percent(done_count, year_plan.target_count)
-    total_pages = max(ceil(goals.count() / 20), 1)
+    total_pages = max(ceil(total_count / 20), 1)
     try:
         current_page = int(request.GET.get("page", "1"))
     except ValueError:
@@ -1627,6 +1902,7 @@ def my_list_detail(request, pk):
         "current_year": year_plan.year,
         "can_manage_list": can_manage_year_plan(request.user, year_plan),
         "can_edit_items": can_edit_year_plan_items(request.user, year_plan),
+        "can_leave_list": can_leave_year_plan(request.user, year_plan),
         "target_limit_reached": year_plan_item_limit_reached(year_plan),
         "like_count": year_plan.liked_by.count(),
         "save_count": year_plan.saved_by.count(),
@@ -1634,6 +1910,9 @@ def my_list_detail(request, pk):
         "is_liked": LikeList.objects.filter(user=request.user, my_list=year_plan).exists(),
         "is_saved": SavedList.objects.filter(user=request.user, my_list=year_plan).exists(),
     }
+    # Owner-only: pending invites for the members card. Do not grant invitees access.
+    if can_manage_year_plan(request.user, year_plan):
+        context["pending_invitees"] = pending_invitees_for_plan(year_plan)
     return render(request, "goals/my_list_detail.html", context)
 
 
@@ -1642,15 +1921,27 @@ def yearly_goal_detail(request, pk):
     goal = get_object_or_404(
         YearlyGoal.objects.select_related("year_plan", "year_plan__user", "year_plan__user__profile"),
         pk=pk,
-        user=request.user,
     )
+    if not can_edit_yearly_goal(request.user, goal):
+        raise PermissionDenied
     year_plan = goal.year_plan or get_default_year_plan(request.user)
+    # Build note blocks for template (text, images, links)
+    note_blocks = []
+    if goal.description and goal.description.strip():
+        note_blocks.append({"type": "text", "text": goal.description})
+    for img in goal.images.all():
+        note_blocks.append({"type": "image", "image": img})
+    for link in goal.links.all():
+        note_blocks.append({"type": "link", "link": link})
+
     return render(request, "goals/yearly_goal_detail.html", {
         "goal": goal,
         "year_plan": year_plan,
         "back_url": reverse("goals:my_list_detail", kwargs={"pk": year_plan.pk}),
         "back_label": year_plan.list_title or "マイリスト",
         "can_edit": True,
+        "can_delete": True,
+        "note_blocks": note_blocks,
     })
 
 
@@ -1698,7 +1989,9 @@ def add_my_list_goal_inline(request, pk):
 @require_POST
 @login_required
 def edit_my_list_goal_inline(request, pk):
-    goal = get_object_or_404(YearlyGoal.objects.select_related("year_plan"), pk=pk, user=request.user)
+    goal = get_object_or_404(YearlyGoal.objects.select_related("year_plan"), pk=pk)
+    if not can_edit_yearly_goal(request.user, goal):
+        raise PermissionDenied
     form = YearlyGoalInlineUpdateForm(request.POST, instance=goal)
     is_ajax = request.headers.get("x-requested-with") == "XMLHttpRequest"
     if form.is_valid():
@@ -1779,42 +2072,140 @@ def page_query_string(request, param, value):
 
 
 def build_public_list_groups(plans, request_user=None, category="", request=None, include_private=False):
+    plans = list(plans)
+    if not plans:
+        return []
+
+    prefetch_related_objects(
+        plans,
+        "collaborators__profile",
+        "comments__user__profile",
+    )
+
     plan_ids = [plan.pk for plan in plans]
     goals = YearlyGoal.objects.filter(
         year_plan_id__in=plan_ids,
-    ).select_related("user", "user__profile", "year_plan").order_by("is_done", "-created_at")
-    if not include_private:
-        goals = goals.filter(item_is_public=True)
+    ).select_related(
+        "user",
+        "user__profile",
+        "year_plan",
+        "added_by",
+        "added_by__profile",
+        "completed_by",
+        "completed_by__profile",
+    ).order_by("is_done", "-created_at")
     if category:
         goals = goals.filter(category=category)
+
+    plan_goal_counts = {
+        row["year_plan_id"]: row
+        for row in YearlyGoal.objects.filter(year_plan_id__in=plan_ids)
+        .values("year_plan_id")
+        .annotate(
+            total_count=Count("id"),
+            done_count=Count("id", filter=Q(is_done=True)),
+            public_done_count=Count("id", filter=Q(item_is_public=True, is_done=True)),
+        )
+    }
+    like_counts = dict(
+        LikeList.objects.filter(my_list_id__in=plan_ids)
+        .values("my_list_id")
+        .annotate(count=Count("id"))
+        .values_list("my_list_id", "count")
+    )
+    save_counts = dict(
+        SavedList.objects.filter(my_list_id__in=plan_ids)
+        .values("my_list_id")
+        .annotate(count=Count("id"))
+        .values_list("my_list_id", "count")
+    )
+
+    request_user_id = getattr(request_user, "id", None)
+    is_authenticated = bool(request_user and request_user.is_authenticated)
+    following_user_ids = set()
+    follow_request_statuses = {}
+    if is_authenticated:
+        owner_ids = {plan.user_id for plan in plans}
+        following_user_ids = set(
+            Follow.objects.filter(follower=request_user, following_id__in=owner_ids).values_list("following_id", flat=True)
+        )
+        latest_follow_requests = (
+            FollowRequest.objects.filter(requester=request_user, target_id__in=owner_ids)
+            .order_by("target_id", "-updated_at")
+            .values("target_id", "status")
+        )
+        for row in latest_follow_requests:
+            follow_request_statuses.setdefault(row["target_id"], row["status"])
 
     grouped_goals = []
     groups_by_plan = {}
     for plan in plans:
         profile = plan.user.profile if hasattr(plan.user, "profile") else None
         display_name = profile.display_name if profile and profile.display_name else plan.user.username
+        detail_url_name = "goals:public_list_detail"
+        collaborator_ids = {collaborator.pk for collaborator in plan.collaborators.all()}
+        can_view_plan = False
+        if is_authenticated:
+            can_view_details = (
+                plan.user_id == request_user_id
+                or request_user_id in collaborator_ids
+                or (
+                    plan.is_public
+                    and (
+                        profile is None
+                        or not profile.is_private
+                        or plan.user_id in following_user_ids
+                    )
+                )
+            )
+            can_view_plan = can_view_details
+            if can_view_details and (
+                plan.user_id == request_user_id
+                or request_user_id in collaborator_ids
+                or not plan.is_public
+            ):
+                detail_url_name = "goals:my_list_detail"
+        else:
+            can_view_plan = plan.is_public and (profile is None or not profile.is_private)
+
+        collaborators_display = []
+        for c in plan.collaborators.all():
+            try:
+                c_profile = c.profile
+            except Exception:
+                c_profile = None
+            collaborators_display.append(c_profile.display_name if c_profile and c_profile.display_name else c.username)
+
+        counts = plan_goal_counts.get(plan.pk, {})
+        total_count = counts.get("total_count", 0)
+        done_count = counts.get("done_count", 0) if include_private else counts.get("public_done_count", 0)
         groups_by_plan[plan.pk] = {
             "plan": plan,
             "user": plan.user,
             "display_name": display_name,
+            "detail_url_name": detail_url_name,
+            "collaborators_display": collaborators_display,
             "list_title": plan.list_title or f"{plan.year}年やりたいこと",
             "target_count": plan.target_count,
-            "done_count": plan.goals.filter(is_done=True).count() if include_private else plan.goals.filter(item_is_public=True, is_done=True).count(),
-            "registered_count": plan.goals.count(),
-            "total_count": plan.goals.count() if include_private else plan.goals.filter(item_is_public=True).count(),
-            "remaining_count": max(plan.target_count - (plan.goals.count() if include_private else plan.goals.filter(item_is_public=True).count()), 0),
-            "like_count": plan.liked_by.count(),
-            "save_count": plan.saved_by.count(),
+            "done_count": done_count,
+            "registered_count": total_count,
+            # Keep registered count consistent for owner and viewers.
+            "total_count": total_count,
+            "remaining_count": max(plan.target_count - total_count, 0),
+            "like_count": like_counts.get(plan.pk, 0),
+            "save_count": save_counts.get(plan.pk, 0),
             "is_saved": False,
             "is_liked": False,
-            "can_react": bool(request_user and request_user.is_authenticated and request_user != plan.user),
-            "can_follow": bool(request_user and request_user.is_authenticated and request_user != plan.user),
+            "can_react": bool(is_authenticated and request_user != plan.user),
+            "can_follow": bool(is_authenticated and request_user != plan.user),
             "is_private": bool(profile and profile.is_private),
-            "follow_request_status": "",
+            "follow_request_status": follow_request_statuses.get(plan.user_id, "") if is_authenticated and request_user != plan.user else "",
             "show_item_privacy": include_private,
+            "can_view_plan": can_view_plan,
             "comment_form": ListCommentForm(),
-            "comments": plan.comments.select_related("user", "user__profile").all(),
+            "comments": list(plan.comments.all()),
             "goals": [],
+            "private_placeholder_count": 0,
         }
         grouped_goals.append(groups_by_plan[plan.pk])
 
@@ -1828,12 +2219,10 @@ def build_public_list_groups(plans, request_user=None, category="", request=None
             for request in TogetherRequest.objects.filter(requester=request_user, list_item__year_plan_id__in=plan_ids)
         }
         memo_titles = set(IdeaMemo.objects.filter(user=request_user).values_list("title", flat=True))
-        following_user_ids = set(Follow.objects.filter(follower=request_user).values_list("following_id", flat=True))
         for plan_id, group in groups_by_plan.items():
             group["is_saved"] = plan_id in saved_plan_ids
             group["is_liked"] = plan_id in liked_plan_ids
             group["is_following"] = group["user"].pk in following_user_ids
-            group["follow_request_status"] = get_follow_request_status(request_user, group["user"])
     else:
         saved_item_ids = set()
         wanted_item_ids = set()
@@ -1844,10 +2233,24 @@ def build_public_list_groups(plans, request_user=None, category="", request=None
     for goal in goals:
         group = groups_by_plan.get(goal.year_plan_id)
         if group:
-            goal.is_wanted_by_current_user = goal.pk in wanted_item_ids or goal.title in memo_titles
-            goal.is_saved_by_current_user = goal.pk in saved_item_ids
-            goal.together_status_for_current_user = together_statuses.get(goal.pk)
-            group["goals"].append(goal)
+            can_show_goal = include_private
+            if not include_private:
+                can_show_goal = goal.item_is_public and group.get("can_view_plan", False)
+            if can_show_goal:
+                goal.is_wanted_by_current_user = goal.pk in wanted_item_ids or goal.title in memo_titles
+                goal.is_saved_by_current_user = goal.pk in saved_item_ids
+                goal.together_status_for_current_user = together_statuses.get(goal.pk)
+                group["goals"].append(goal)
+            else:
+                group["private_placeholder_count"] += 1
+
+    if not include_private:
+        for group in grouped_goals:
+            for _ in range(group["private_placeholder_count"]):
+                group["goals"].append({
+                    "is_private_placeholder": True,
+                    "title": "🔒 非公開の項目",
+                })
 
     for group in grouped_goals:
         group["progress_percent"] = progress_percent(group["done_count"], group["total_count"])
@@ -1855,6 +2258,8 @@ def build_public_list_groups(plans, request_user=None, category="", request=None
         category_labels = []
         seen_categories = set()
         for goal in group["goals"]:
+            if isinstance(goal, dict) and goal.get("is_private_placeholder"):
+                continue
             if goal.category not in seen_categories:
                 seen_categories.add(goal.category)
                 category_labels.append(goal.get_category_display())
@@ -1907,9 +2312,7 @@ def public_goal_list(request):
     page_query = urlencode(query_params)
     grouped_goals = build_public_list_groups(page_obj.object_list, request.user, request=request)
 
-    users_qs = get_user_model().objects.exclude(pk=getattr(request.user, "pk", None)).filter(
-        profile__is_private=False,
-    ).select_related("profile").annotate(
+    users_qs = get_user_model().objects.exclude(pk=getattr(request.user, "pk", None)).select_related("profile").annotate(
         followers_count=Count("follower_relations"),
     )
     if query:
@@ -1917,22 +2320,18 @@ def public_goal_list(request):
     users_qs = users_qs.order_by("-followers_count", "username")
     user_paginator = Paginator(users_qs, 10)
     user_page_obj = user_paginator.get_page(request.GET.get("page"))
-    user_results = [build_user_row(user, request.user) for user in user_page_obj.object_list]
-    recommended_users = [
-        build_user_row(user, request.user)
-        for user in get_user_model().objects.exclude(pk=getattr(request.user, "pk", None)).filter(
-            profile__is_private=False,
-        ).select_related("profile").annotate(
-            followers_count=Count("follower_relations"),
-        ).order_by("-followers_count", "username")[:6]
-    ]
+    user_results = build_user_rows(user_page_obj.object_list, request.user)
+    recommended_user_qs = get_user_model().objects.exclude(pk=getattr(request.user, "pk", None)).select_related("profile").annotate(
+        followers_count=Count("follower_relations"),
+    ).order_by("-followers_count", "username")[:6]
+    recommended_users = build_user_rows(recommended_user_qs, request.user)
 
     context = {
         "goal_groups": grouped_goals,
         "page_obj": page_obj,
         "user_page_obj": user_page_obj,
         "page_query": page_query,
-        "public_count": public_plans.count(),
+        "public_count": page_obj.paginator.count,
         "done_count": sum(group["done_count"] for group in grouped_goals),
         "query": query,
         "popular_keywords": popular_keywords,
@@ -1954,7 +2353,39 @@ def public_list_detail(request, pk):
     groups = build_public_list_groups([plan], request.user, request=request)
     if not groups:
         return redirect("goals:public_goal_list")
-    return render(request, "goals/public_list_detail.html", {"group": groups[0]})
+    context = {"group": groups[0]}
+    if can_manage_year_plan(request.user, plan):
+        # Owner view: show pending invitees in members card as "招待中".
+        context["pending_invitees"] = pending_invitees_for_plan(plan)
+    return render(request, "goals/public_list_detail.html", context)
+
+
+def visible_reacted_plans(records, user):
+    plans = []
+    seen = set()
+    for record in records:
+        plan = record.my_list
+        if not plan or plan.pk in seen:
+            continue
+        if can_view_list(user, plan):
+            seen.add(plan.pk)
+            plans.append(plan)
+    return plans
+
+
+@login_required
+def liked_list_page(request):
+    liked = LikeList.objects.filter(user=request.user).select_related("my_list", "my_list__user", "my_list__user__profile").order_by("-created_at")
+    plans = visible_reacted_plans(liked, request.user)
+    paginator = Paginator(plans, 5)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    grouped_goals = build_public_list_groups(page_obj.object_list, request.user, request=request, include_private=True)
+    return render(request, "goals/saved_list.html", {
+        "goal_groups": grouped_goals,
+        "page_heading": "いいねしたリスト",
+        "empty_message": "いいねしたリストはまだありません。",
+        "page_obj": page_obj,
+    })
 
 
 def public_goal_detail(request, pk):
@@ -1969,6 +2400,15 @@ def public_goal_detail(request, pk):
     can_save_item = bool(request.user.is_authenticated and year_plan.user != request.user)
     if request.user.is_authenticated:
         is_saved_item = SavedItem.objects.filter(user=request.user, item=goal).exists()
+    # Build note blocks for template (text, images, links)
+    note_blocks = []
+    if goal.description and goal.description.strip():
+        note_blocks.append({"type": "text", "text": goal.description})
+    for img in goal.images.all():
+        note_blocks.append({"type": "image", "image": img})
+    for link in goal.links.all():
+        note_blocks.append({"type": "link", "link": link})
+
     return render(request, "goals/public_goal_detail.html", {
         "goal": goal,
         "year_plan": year_plan,
@@ -1977,24 +2417,21 @@ def public_goal_detail(request, pk):
         "can_edit": False,
         "can_save_item": can_save_item,
         "is_saved_item": is_saved_item,
+        "note_blocks": note_blocks,
     })
 
 
 @login_required
 def saved_list_page(request):
-    saved = SavedList.objects.filter(
-        user=request.user,
-        my_list__is_public=True,
-    ).filter(
-        visible_public_plan_filter(request.user, prefix="my_list__")
-    ).select_related("my_list", "my_list__user", "my_list__user__profile").order_by("-created_at")
-    plans = [item.my_list for item in saved]
+    saved = SavedList.objects.filter(user=request.user).select_related("my_list", "my_list__user", "my_list__user__profile").order_by("-created_at")
+    plans = visible_reacted_plans(saved, request.user)
     paginator = Paginator(plans, 5)
     page_obj = paginator.get_page(request.GET.get("page"))
-    grouped_goals = build_public_list_groups(page_obj.object_list, request.user, request=request)
+    grouped_goals = build_public_list_groups(page_obj.object_list, request.user, request=request, include_private=True)
     return render(request, "goals/saved_list.html", {
         "goal_groups": grouped_goals,
         "page_heading": "保存したリスト",
+        "empty_message": "保存したリストはまだありません。",
         "page_obj": page_obj,
     })
 
@@ -2041,7 +2478,7 @@ def following_users_page(request):
     following = get_user_model().objects.filter(
         follower_relations__follower=request.user,
     ).select_related("profile").order_by("username")
-    user_rows = [build_user_row(user, request.user) for user in following]
+    user_rows = build_user_rows(following, request.user)
     return render(request, "goals/follow_user_list.html", {
         "user_rows": user_rows,
         "page_heading": "フォロー",
@@ -2054,7 +2491,7 @@ def followers_page(request):
     followers = get_user_model().objects.filter(
         following_relations__following=request.user,
     ).select_related("profile").order_by("username")
-    user_rows = [build_user_row(user, request.user) for user in followers]
+    user_rows = build_user_rows(followers, request.user)
     return render(request, "goals/follow_user_list.html", {
         "user_rows": user_rows,
         "page_heading": "フォロワー",
@@ -2089,19 +2526,17 @@ def toggle_follow(request, username):
 @require_POST
 @login_required
 def toggle_saved_list(request, pk):
-    plan = get_object_or_404(YearPlan, pk=pk, is_public=True)
+    # Allow toggling saved state for any list the user can view (including their own)
+    plan = get_object_or_404(YearPlan, pk=pk)
     if not can_view_list(request.user, plan):
         raise PermissionDenied
-    if plan.user == request.user:
-        messages.info(request, "自分のリストは保存対象外です。")
+    saved = SavedList.objects.filter(user=request.user, my_list=plan).first()
+    if saved:
+        saved.delete()
+        messages.success(request, "保存を解除しました。")
     else:
-        saved = SavedList.objects.filter(user=request.user, my_list=plan).first()
-        if saved:
-            saved.delete()
-            messages.success(request, "保存を解除しました。")
-        else:
-            SavedList.objects.create(user=request.user, my_list=plan)
-            messages.success(request, "保存しました。")
+        SavedList.objects.create(user=request.user, my_list=plan)
+        messages.success(request, "保存しました。")
     return redirect(request.META.get("HTTP_REFERER") or reverse("goals:public_goal_list"))
 
 
@@ -2132,19 +2567,17 @@ def toggle_saved_item(request, pk):
 @require_POST
 @login_required
 def toggle_like_list(request, pk):
-    plan = get_object_or_404(YearPlan, pk=pk, is_public=True)
+    # Allow liking any list the user can view (including their own)
+    plan = get_object_or_404(YearPlan, pk=pk)
     if not can_view_list(request.user, plan):
         raise PermissionDenied
-    if plan.user == request.user:
-        messages.info(request, "自分のリストはいいね対象外です。")
+    liked = LikeList.objects.filter(user=request.user, my_list=plan).first()
+    if liked:
+        liked.delete()
+        messages.success(request, "いいねを解除しました。")
     else:
-        liked = LikeList.objects.filter(user=request.user, my_list=plan).first()
-        if liked:
-            liked.delete()
-            messages.success(request, "いいねを解除しました。")
-        else:
-            LikeList.objects.create(user=request.user, my_list=plan)
-            messages.success(request, "いいねしました。")
+        LikeList.objects.create(user=request.user, my_list=plan)
+        messages.success(request, "いいねしました。")
     return redirect(request.META.get("HTTP_REFERER") or reverse("goals:public_goal_list"))
 
 
@@ -2447,7 +2880,9 @@ def toggle_done(request, model_name, pk):
     if not request.user.is_authenticated:
         return redirect("login")
     if model_name == "yearly":
-        item = get_object_or_404(model, pk=pk, user=request.user)
+        item = get_object_or_404(model.objects.select_related("year_plan"), pk=pk)
+        if not can_edit_yearly_goal(request.user, item):
+            raise PermissionDenied
     else:
         item = get_object_or_404(model, pk=pk, user=request.user)
 
@@ -2526,7 +2961,7 @@ class YearlyGoalUpdateView(LoginRequiredMixin, UpdateView):
     def get_queryset(self):
         return YearlyGoal.objects.select_related("year_plan").filter(
             Q(year_plan__user=self.request.user)
-            | Q(year_plan__collaborators=self.request.user, added_by=self.request.user)
+            | Q(year_plan__collaborators=self.request.user)
         ).distinct()
 
     def form_valid(self, form):
@@ -2551,7 +2986,10 @@ class YearlyGoalDeleteView(LoginRequiredMixin, DeleteView):
     extra_context = {"cancel_url": reverse_lazy("goals:yearly_goal_list")}
 
     def get_queryset(self):
-        return YearlyGoal.objects.filter(user=self.request.user)
+        return YearlyGoal.objects.select_related("year_plan").filter(
+            Q(year_plan__user=self.request.user)
+            | Q(year_plan__collaborators=self.request.user)
+        ).distinct()
 
     def form_valid(self, form):
         self.year_plan = self.object.year_plan
@@ -2572,7 +3010,7 @@ class UserFormKwargsMixin:
         return kwargs
 
 
-class YearPlanCreateView(LoginRequiredMixin, CreateView):
+class YearPlanCreateView(LoginRequiredMixin, UserFormKwargsMixin, CreateView):
     model = YearPlan
     form_class = YearPlanForm
     template_name = "goals/form.html"
@@ -2582,16 +3020,73 @@ class YearPlanCreateView(LoginRequiredMixin, CreateView):
         "actions_in_title": True,
     }
 
+    def get_initial(self):
+        initial = super().get_initial() or {}
+        # If coming from the "共同リストを作成" card, the link adds ?collaborative=1
+        collaborative = self.request.GET.get("collaborative")
+        if collaborative and str(collaborative).lower() in ("1", "true", "yes"):
+            initial["is_collaborative"] = True
+        return initial
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Provide minimal all-user data for client-side searching when user types.
+        # Do not assume Profile exists for every user.
+        users = (
+            get_user_model().objects.exclude(pk=self.request.user.pk)
+            .order_by("username")
+        )
+        all_data = []
+        for u in users:
+            try:
+                profile = u.profile
+            except Exception:
+                profile = None
+            display_name = getattr(profile, "display_name", None) or u.username
+            avatar = ""
+            if profile is not None and getattr(profile, "icon", None):
+                try:
+                    avatar = profile.icon.url or ""
+                except Exception:
+                    avatar = ""
+            all_data.append({
+                "id": str(u.pk),
+                "username": u.username,
+                "display_name": display_name,
+                "avatar": avatar,
+            })
+        context["all_collaborators_data"] = all_data
+        return context
+
     def form_valid(self, form):
+        # Save instance without committing M2M collaborators. Create CollaborationInvite
+        # records for selected collaborators instead of adding them immediately.
         form.instance.user = self.request.user
         form.instance.year = timezone.localdate().year
-        return super().form_valid(form)
+        instance = form.save(commit=False)
+        instance.save()
+        # Ensure CreateView self.object is set so get_success_url can reference it
+        self.object = instance
+        # Handle collaborators: create pending invites for selected users.
+        collaborator_qs = form.cleaned_data.get("collaborators") or []
+        from .models import CollaborationInvite
+        for u in collaborator_qs:
+            if u.pk == self.request.user.pk:
+                continue
+            # create invite if not exists and not already collaborator
+            if not instance.collaborators.filter(pk=u.pk).exists():
+                CollaborationInvite.objects.update_or_create(
+                    list=instance, invitee=u, defaults={"inviter": self.request.user, "status": CollaborationInvite.STATUS_PENDING}
+                )
+        # Intentionally do NOT call form.save_m2m() for collaborators here;
+        # invites are created and collaborators are added when invite accepted.
+        return redirect(self.get_success_url())
 
     def get_success_url(self):
         return reverse("goals:my_list_detail", kwargs={"pk": self.object.pk})
 
 
-class YearPlanUpdateView(LoginRequiredMixin, UpdateView):
+class YearPlanUpdateView(LoginRequiredMixin, UserFormKwargsMixin, UpdateView):
     model = YearPlan
     form_class = YearPlanForm
     template_name = "goals/form.html"
@@ -2608,6 +3103,47 @@ class YearPlanUpdateView(LoginRequiredMixin, UpdateView):
         context = super().get_context_data(**kwargs)
         context["cancel_url"] = reverse("goals:my_list_detail", kwargs={"pk": self.object.pk})
         return context
+
+    def form_valid(self, form):
+        instance = form.save(commit=False)
+        instance.save()
+        self.object = instance
+        selected_ids = set()
+        if instance.is_collaborative:
+            collaborator_qs = form.cleaned_data.get("collaborators") or []
+            for u in collaborator_qs:
+                if u.pk == self.request.user.pk:
+                    continue
+                selected_ids.add(u.pk)
+
+        accepted_ids = set(instance.collaborators.values_list("pk", flat=True))
+        pending_qs = CollaborationInvite.objects.filter(
+            list=instance,
+            status=CollaborationInvite.STATUS_PENDING,
+        )
+        pending_ids = set(pending_qs.values_list("invitee_id", flat=True))
+
+        removed_member_ids = accepted_ids - selected_ids
+        if removed_member_ids:
+            instance.collaborators.remove(*removed_member_ids)
+
+        stale_pending_ids = pending_ids - selected_ids
+        if stale_pending_ids:
+            pending_qs.filter(invitee_id__in=stale_pending_ids).delete()
+
+        invite_target_ids = selected_ids - accepted_ids
+        invite_targets = get_user_model().objects.filter(pk__in=invite_target_ids)
+        for u in invite_targets:
+            if u.pk == self.request.user.pk:
+                continue
+            if u.pk not in pending_ids:
+                CollaborationInvite.objects.update_or_create(
+                    list=instance,
+                    invitee=u,
+                    defaults={"inviter": self.request.user, "status": CollaborationInvite.STATUS_PENDING},
+                )
+        touch_year_plan(instance)
+        return redirect(self.get_success_url())
 
     def get_success_url(self):
         return reverse("goals:my_list_detail", kwargs={"pk": self.object.pk})

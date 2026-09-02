@@ -29,7 +29,7 @@
     {% for group in goal_groups %}
         {% include "goals/partials/public_list_overview_card.html" with group=group %}
     {% empty %}
-        <p class="notice">保存した公開マイリストはまだありません。</p>
+        <p class="notice">{{ empty_message|default:"表示できるリストはまだありません。" }}</p>
     {% endfor %}
 </section>
 

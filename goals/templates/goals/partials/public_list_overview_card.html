@@ -10,7 +10,7 @@
             </a>
             <div>
                 <p class="discover-user">{{ group.display_name }}さん</p>
-                <h3><a class="discover-title-link" href="{% url 'goals:public_list_detail' group.plan.pk %}">{{ group.list_title }}</a></h3>
+                <h3><a class="discover-title-link" href="{% url group.detail_url_name group.plan.pk %}">{{ group.list_title }}</a></h3>
             </div>
         </div>
     </div>
@@ -30,7 +30,7 @@
                 <span class="social-count">{{ group.like_count }}</span>
             </button>
         </form>
-        <button class="social-icon-button share-list-button" type="button" data-copy-list-url="{% url 'goals:public_list_detail' group.plan.pk %}" data-share-count-url="{% url 'goals:record_list_share' group.plan.pk %}" aria-label="共有">
+        <button class="social-icon-button share-list-button" type="button" data-copy-list-url="{% url group.detail_url_name group.plan.pk %}" data-share-count-url="{% url 'goals:record_list_share' group.plan.pk %}" aria-label="共有">
             <svg class="share-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12.5 20 4l-4.2 16-3.6-6.1L4 12.5Z"></path></svg>
             <span class="social-count" data-share-count>{{ group.share_count|default:0 }}</span>
             <span class="sr-only" data-copy-label>リンクをコピー</span>
