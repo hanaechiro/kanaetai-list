@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.db.models import F
 from django.utils import timezone
 
@@ -6,6 +8,8 @@ from .models import UserActivity
 
 class UserActivityMiddleware:
     """Record one lightweight daily activity row for authenticated Wishly users."""
+
+    UPDATE_INTERVAL = timedelta(minutes=1)
 
     EXCLUDED_PREFIXES = (
         "/admin/",
@@ -28,18 +32,21 @@ class UserActivityMiddleware:
             and response.status_code < 500
             and not request.path.startswith(self.EXCLUDED_PREFIXES)
         ):
+            today = timezone.localdate()
             now = timezone.now()
-            activity, _ = UserActivity.objects.get_or_create(
-                user=user,
-                date=timezone.localdate(),
-                defaults={
-                    "first_seen_at": now,
-                    "last_seen_at": now,
-                    "request_count": 0,
-                },
-            )
-            UserActivity.objects.filter(pk=activity.pk).update(
-                last_seen_at=now,
-                request_count=F("request_count") + 1,
-            )
+            activity = UserActivity.objects.filter(user=user, date=today).values("pk", "last_seen_at").first()
+
+            if activity is None:
+                UserActivity.objects.create(
+                    user=user,
+                    date=today,
+                    first_seen_at=now,
+                    last_seen_at=now,
+                    request_count=1,
+                )
+            elif activity["last_seen_at"] is None or now - activity["last_seen_at"] >= self.UPDATE_INTERVAL:
+                UserActivity.objects.filter(pk=activity["pk"]).update(
+                    last_seen_at=now,
+                    request_count=F("request_count") + 1,
+                )
         return response

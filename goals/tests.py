@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.http import HttpResponse
 from django.db import connection
 from django.db import IntegrityError, transaction
 from django.test import RequestFactory, TestCase
@@ -33,10 +34,13 @@ from .models import (
     Profile,
     SavedItem,
     SavedList,
+    UserActivity,
     TogetherRequest,
     YearPlan,
     YearlyGoal,
 )
+from .context_processors import notification_counts
+from .middleware import UserActivityMiddleware
 from . import views
 
 
@@ -216,6 +220,78 @@ class NotificationBehaviorTests(TestCase):
 
         refreshed_profile_response = self.client.get(reverse("goals:my_profile"))
         self.assertEqual(refreshed_profile_response.context["unread_notification_count"], 0)
+
+    def test_notification_counts_uses_one_sql_roundtrip_for_counts(self):
+        self.owner.profile.last_notification_seen = timezone.now() - timedelta(days=1)
+        self.owner.profile.save(update_fields=["last_notification_seen"])
+
+        other = get_user_model().objects.create_user(username="other", email="other@example.com", password="password12345")
+        plan = YearPlan.objects.create(user=self.owner, year=2026, list_title="Owner plan", is_public=True)
+        other_plan = YearPlan.objects.create(user=other, year=2026, list_title="Other plan", is_public=True)
+        FollowRequest.objects.create(requester=self.follower, target=self.owner)
+        CollaborationInvite.objects.create(list=other_plan, inviter=other, invitee=self.owner)
+        Follow.objects.create(follower=self.follower, following=self.owner)
+        LikeList.objects.create(user=self.follower, my_list=plan)
+        SavedList.objects.create(user=self.follower, my_list=plan)
+
+        request = RequestFactory().get("/")
+        request.user = self.owner
+
+        with CaptureQueriesContext(connection) as context:
+            result = notification_counts(request)
+
+        self.assertEqual(result["unread_notification_count"], 5)
+        self.assertLessEqual(len(context), 2)
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class UserActivityMiddlewareTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="active", email="active@example.com", password="password12345")
+        self.factory = RequestFactory()
+        self.middleware = UserActivityMiddleware(lambda request: HttpResponse("ok"))
+
+    def test_recent_activity_does_not_write_every_request(self):
+        original_seen_at = timezone.now() - timedelta(seconds=10)
+        activity = UserActivity.objects.create(
+            user=self.user,
+            date=timezone.localdate(),
+            first_seen_at=original_seen_at,
+            last_seen_at=original_seen_at,
+            request_count=3,
+        )
+        request = self.factory.get("/profile/")
+        request.user = self.user
+
+        with CaptureQueriesContext(connection) as context:
+            response = self.middleware(request)
+
+        activity.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(context), 1)
+        self.assertEqual(activity.request_count, 3)
+        self.assertEqual(activity.last_seen_at, original_seen_at)
+
+    def test_stale_activity_updates_after_interval(self):
+        original_seen_at = timezone.now() - timedelta(minutes=5)
+        activity = UserActivity.objects.create(
+            user=self.user,
+            date=timezone.localdate(),
+            first_seen_at=original_seen_at,
+            last_seen_at=original_seen_at,
+            request_count=3,
+        )
+        request = self.factory.post("/follow/")
+        request.user = self.user
+
+        with CaptureQueriesContext(connection) as context:
+            response = self.middleware(request)
+
+        activity.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(context), 2)
+        self.assertEqual(activity.request_count, 4)
+        self.assertGreater(activity.last_seen_at, original_seen_at)
 
 
 @override_settings(STORAGES=TEST_STORAGES)
