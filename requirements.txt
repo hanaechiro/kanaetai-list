@@ -7,3 +7,4 @@ Pillow>=11.0,<12.0
 pillow-heif>=1.1,<2.0
 cloudinary>=1.46,<2.0
 django-cloudinary-storage>=0.3,<0.4
+resend>=2.13,<3.0

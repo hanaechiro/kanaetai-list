@@ -1,4 +1,5 @@
 import base64
+import inspect
 import importlib
 import json
 import os
@@ -6,14 +7,17 @@ import re
 import tempfile
 from datetime import timedelta
 from io import BytesIO
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
+from django.contrib import admin
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.http import HttpResponse
 from django.db import connection
 from django.db import IntegrityError, transaction
-from django.test import RequestFactory, TestCase
+from django.test import Client, RequestFactory, TestCase
 from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
@@ -28,19 +32,25 @@ from .models import (
     Follow,
     FollowRequest,
     GoalImage,
+    GoalLink,
     IdeaMemo,
     LikeList,
     ListComment,
+    MonthlyGoal,
     Profile,
     SavedItem,
     SavedList,
+    TodayTask,
     UserActivity,
     TogetherRequest,
+    WantToTry,
+    WeeklyGoal,
     YearPlan,
     YearlyGoal,
 )
 from .context_processors import notification_counts
 from .middleware import UserActivityMiddleware
+from . import forms as goals_forms
 from . import views
 
 
@@ -1898,3 +1908,649 @@ class PublicListGroupPerformanceTests(TestCase):
             legacy_queries,
             msg=f"legacy={legacy_queries}, optimized={optimized_queries}",
         )
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class ProgressPercentConsistencyTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="progress_owner",
+            email="progress_owner@example.com",
+            password="password12345",
+        )
+        self.client.force_login(self.user)
+
+    def test_progress_percent_requested_examples(self):
+        self.assertEqual(views.progress_percent(0, 0), 0)
+        self.assertEqual(views.progress_percent(0, 10), 0)
+        self.assertEqual(views.progress_percent(1, 10), 10)
+        self.assertEqual(views.progress_percent(5, 10), 50)
+        self.assertEqual(views.progress_percent(10, 10), 100)
+        self.assertEqual(views.progress_percent(2, 2), 100)
+
+    def test_my_profile_and_my_list_detail_use_same_progress_formula(self):
+        plan = YearPlan.objects.create(
+            user=self.user,
+            year=2026,
+            list_title="Progress check",
+            target_count=100,
+            is_public=True,
+        )
+        YearlyGoal.objects.create(user=self.user, year_plan=plan, title="done-1", is_done=True)
+        YearlyGoal.objects.create(user=self.user, year_plan=plan, title="done-2", is_done=True)
+
+        profile_response = self.client.get(reverse("goals:my_profile"))
+        detail_response = self.client.get(reverse("goals:my_list_detail", args=[plan.pk]))
+
+        self.assertEqual(profile_response.status_code, 200)
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(profile_response.context["my_plans"][0].progress_percent, 100)
+        self.assertEqual(detail_response.context["setting"].progress_percent, 100)
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class ManagementAdminFeatureTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.staff = User.objects.create_user(
+            username="mgmt_staff",
+            email="mgmt_staff@example.com",
+            password="password12345",
+            is_staff=True,
+        )
+        self.normal_user = User.objects.create_user(
+            username="mgmt_user",
+            email="mgmt_user@example.com",
+            password="password12345",
+        )
+        self.target_user = User.objects.create_user(
+            username="target_user",
+            email="target_user@example.com",
+            password="password12345",
+        )
+        self.old_user = User.objects.create_user(
+            username="very_old_user",
+            email="very_old_user@example.com",
+            password="password12345",
+        )
+        self.old_user.date_joined = timezone.now() - timedelta(days=120)
+        self.old_user.save(update_fields=["date_joined"])
+
+        self.now = timezone.now()
+        self.today = timezone.localdate()
+        self.list_created_today = self.now
+        self.list_created_7_days_ago = self.now - timedelta(days=6)
+        self.list_created_32_days_ago = self.now - timedelta(days=32)
+        self.item_created_today = self.now
+        self.item_created_3_days_ago = self.now - timedelta(days=3)
+        self.item_created_8_days_ago = self.now - timedelta(days=8)
+        self.item_created_40_days_ago = self.now - timedelta(days=40)
+
+        self.public_collab_plan = YearPlan.objects.create(
+            user=self.target_user,
+            year=2026,
+            list_title="公開共同リスト",
+            target_count=30,
+            is_public=True,
+            is_collaborative=True,
+        )
+        self.private_plan = YearPlan.objects.create(
+            user=self.target_user,
+            year=2025,
+            list_title="非公開リスト",
+            target_count=10,
+            is_public=False,
+            is_collaborative=False,
+        )
+        YearPlan.objects.filter(pk=self.public_collab_plan.pk).update(created_at=self.list_created_today)
+        YearPlan.objects.filter(pk=self.private_plan.pk).update(created_at=self.list_created_7_days_ago)
+        self.older_public_list = YearPlan.objects.create(
+            user=self.normal_user,
+            year=2024,
+            list_title="古い公開リスト",
+            target_count=20,
+            is_public=True,
+            is_collaborative=False,
+        )
+        YearPlan.objects.filter(pk=self.older_public_list.pk).update(created_at=self.list_created_32_days_ago)
+
+        YearlyGoal.objects.create(user=self.target_user, year_plan=self.public_collab_plan, title="公開項目A", is_done=True)
+        YearlyGoal.objects.create(user=self.target_user, year_plan=self.public_collab_plan, title="公開項目B", is_done=False)
+        YearlyGoal.objects.create(user=self.target_user, year_plan=self.public_collab_plan, title="公開項目C", is_done=False)
+        YearlyGoal.objects.create(user=self.target_user, year_plan=self.private_plan, title="非公開項目", is_done=False)
+        YearlyGoal.objects.create(user=self.normal_user, year_plan=self.older_public_list, title="古い項目", is_done=False)
+        YearlyGoal.objects.filter(title="公開項目A").update(created_at=self.item_created_today)
+        YearlyGoal.objects.filter(title="公開項目B").update(created_at=self.item_created_8_days_ago)
+        YearlyGoal.objects.filter(title="公開項目C").update(created_at=self.item_created_3_days_ago)
+        YearlyGoal.objects.filter(title="非公開項目").update(created_at=self.item_created_40_days_ago)
+        YearlyGoal.objects.filter(title="古い項目").update(created_at=self.item_created_40_days_ago)
+
+    def _management_pages(self):
+        return [
+            reverse("goals:management_dashboard"),
+            reverse("goals:management_users"),
+            reverse("goals:management_user_detail", args=[self.target_user.pk]),
+            reverse("goals:management_lists"),
+            reverse("goals:management_list_detail", args=[self.public_collab_plan.pk]),
+            reverse("goals:management_templates"),
+        ]
+
+    def test_staff_can_access_management_pages(self):
+        self.client.force_login(self.staff)
+        for url in self._management_pages():
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+
+    def test_non_staff_cannot_access_management_pages(self):
+        self.client.force_login(self.normal_user)
+        for url in self._management_pages():
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 302)
+                self.assertIn("/admin/login/", response["Location"])
+
+        action_urls = [
+            reverse("goals:management_user_deactivate", args=[self.target_user.pk]),
+            reverse("goals:management_user_activate", args=[self.target_user.pk]),
+            reverse("goals:management_list_make_private", args=[self.public_collab_plan.pk]),
+        ]
+        for url in action_urls:
+            with self.subTest(action_url=url):
+                response = self.client.post(url, {"confirm": "1"})
+                self.assertEqual(response.status_code, 302)
+                self.assertIn("/admin/login/", response["Location"])
+
+    def test_anonymous_cannot_access_management_pages(self):
+        for url in self._management_pages():
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 302)
+                self.assertIn("/admin/login/", response["Location"])
+
+        action_urls = [
+            reverse("goals:management_user_deactivate", args=[self.target_user.pk]),
+            reverse("goals:management_user_activate", args=[self.target_user.pk]),
+            reverse("goals:management_list_make_private", args=[self.public_collab_plan.pk]),
+        ]
+        for url in action_urls:
+            with self.subTest(action_url=url):
+                response = self.client.post(url, {"confirm": "1"})
+                self.assertEqual(response.status_code, 302)
+                self.assertIn("/admin/login/", response["Location"])
+
+    def test_dashboard_kpis_include_visibility_and_collaboration_counts(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("goals:management_dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        kpi_map = {item["label"]: item["value"] for item in response.context["kpis"]}
+        self.assertEqual(kpi_map["総ユーザー数"], get_user_model().objects.count())
+        self.assertEqual(kpi_map["今日の新規登録数"], get_user_model().objects.filter(date_joined__date=timezone.localdate()).count())
+        self.assertEqual(kpi_map["過去7日の新規登録数"], get_user_model().objects.filter(date_joined__date__gte=timezone.localdate() - timedelta(days=6)).count())
+        self.assertEqual(kpi_map["過去30日の新規登録数"], get_user_model().objects.filter(date_joined__date__gte=timezone.localdate() - timedelta(days=29)).count())
+        self.assertEqual(kpi_map["総リスト数"], YearPlan.objects.count())
+        self.assertEqual(kpi_map["総項目数"], YearlyGoal.objects.count())
+        self.assertEqual(kpi_map["達成済み項目数"], YearlyGoal.objects.filter(is_done=True).count())
+        self.assertEqual(kpi_map["公開リスト数"], YearPlan.objects.filter(is_public=True).count())
+        self.assertEqual(kpi_map["非公開リスト数"], YearPlan.objects.filter(is_public=False).count())
+        self.assertEqual(kpi_map["共同リスト数"], YearPlan.objects.filter(is_collaborative=True).count())
+
+    def test_dashboard_period_switch_supports_7_30_90_and_all(self):
+        self.client.force_login(self.staff)
+
+        for period in ("7", "30", "90"):
+            with self.subTest(period=period):
+                response = self.client.get(reverse("goals:management_dashboard"), {"period": period})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context["period"], period)
+                self.assertEqual(len(response.context["user_chart"]["rows"]), int(period))
+                self.assertEqual(len(response.context["list_chart"]["rows"]), int(period))
+                self.assertEqual(len(response.context["item_chart"]["rows"]), int(period))
+                self.assertContains(response, response.context["user_chart"]["points"])
+
+        all_response = self.client.get(reverse("goals:management_dashboard"), {"period": "all"})
+        self.assertEqual(all_response.status_code, 200)
+        self.assertEqual(all_response.context["period"], "all")
+        earliest = get_user_model().objects.order_by("date_joined").first().date_joined.date()
+        expected_days = (timezone.localdate() - earliest).days + 1
+        self.assertEqual(len(all_response.context["user_chart"]["rows"]), expected_days)
+        self.assertContains(all_response, all_response.context["user_chart"]["points"])
+        self.assertEqual(all_response.context["list_chart"]["rows"][0]["date"], self.list_created_32_days_ago.date())
+        self.assertEqual(all_response.context["item_chart"]["rows"][0]["date"], self.item_created_40_days_ago.date())
+
+    def test_new_list_and_item_daily_counts_include_zero_days(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("goals:management_dashboard"), {"period": "7"})
+
+        self.assertEqual(response.status_code, 200)
+        list_rows = response.context["list_chart"]["rows"]
+        item_rows = response.context["item_chart"]["rows"]
+
+        self.assertEqual(len(list_rows), 7)
+        self.assertEqual(len(item_rows), 7)
+        self.assertTrue(any(row["count"] == 0 for row in list_rows))
+        self.assertTrue(any(row["count"] == 0 for row in item_rows))
+        self.assertEqual(sum(row["count"] for row in list_rows), 2)
+        self.assertEqual(sum(row["count"] for row in item_rows), 2)
+
+    def test_all_period_uses_each_dataset_oldest_created_at(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("goals:management_dashboard"), {"period": "all"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["user_chart"]["rows"][0]["date"], self.old_user.date_joined.date())
+        self.assertEqual(response.context["list_chart"]["rows"][0]["date"], self.list_created_32_days_ago.date())
+        self.assertEqual(response.context["item_chart"]["rows"][0]["date"], self.item_created_40_days_ago.date())
+
+    def test_management_users_search_and_user_detail(self):
+        self.client.force_login(self.staff)
+        users_response = self.client.get(reverse("goals:management_users"), {"q": "target_user"})
+        detail_response = self.client.get(reverse("goals:management_user_detail", args=[self.target_user.pk]))
+
+        self.assertEqual(users_response.status_code, 200)
+        self.assertContains(users_response, "target_user")
+        self.assertNotContains(users_response, "mgmt_user")
+
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, "target_user")
+        self.assertContains(detail_response, "このユーザーが作成したリスト")
+        self.assertContains(detail_response, "公開共同リスト")
+        self.assertContains(detail_response, "非公開リスト")
+
+    def test_management_lists_search_filter_and_detail(self):
+        self.client.force_login(self.staff)
+
+        search_response = self.client.get(reverse("goals:management_lists"), {"q": "公開共同"})
+        self.assertEqual(search_response.status_code, 200)
+        self.assertContains(search_response, "公開共同リスト")
+        self.assertNotContains(search_response, "非公開リスト")
+
+        public_response = self.client.get(reverse("goals:management_lists"), {"visibility": "public"})
+        self.assertContains(public_response, "公開共同リスト")
+        self.assertNotContains(public_response, "非公開リスト")
+
+        private_response = self.client.get(reverse("goals:management_lists"), {"visibility": "private"})
+        self.assertContains(private_response, "非公開リスト")
+        self.assertNotContains(private_response, "公開共同リスト")
+
+        detail_response = self.client.get(reverse("goals:management_list_detail", args=[self.public_collab_plan.pk]))
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, "公開共同リスト")
+        self.assertContains(detail_response, "公開項目A")
+        self.assertContains(detail_response, "公開項目B")
+
+    def test_user_deactivate_and_activate_flow(self):
+        self.client.force_login(self.staff)
+
+        deactivate_url = reverse("goals:management_user_deactivate", args=[self.target_user.pk])
+        activate_url = reverse("goals:management_user_activate", args=[self.target_user.pk])
+
+        response = self.client.post(deactivate_url, {"confirm": "1"})
+        self.assertEqual(response.status_code, 302)
+        self.target_user.refresh_from_db()
+        self.assertFalse(self.target_user.is_active)
+
+        response = self.client.post(activate_url, {"confirm": "1"})
+        self.assertEqual(response.status_code, 302)
+        self.target_user.refresh_from_db()
+        self.assertTrue(self.target_user.is_active)
+
+    def test_staff_cannot_deactivate_self(self):
+        self.client.force_login(self.staff)
+
+        response = self.client.post(reverse("goals:management_user_deactivate", args=[self.staff.pk]), {"confirm": "1"})
+        self.assertEqual(response.status_code, 302)
+        self.staff.refresh_from_db()
+        self.assertTrue(self.staff.is_active)
+
+    def test_management_list_make_private(self):
+        self.client.force_login(self.staff)
+        self.assertTrue(self.public_collab_plan.is_public)
+
+        response = self.client.post(
+            reverse("goals:management_list_make_private", args=[self.public_collab_plan.pk]),
+            {"confirm": "1"},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.public_collab_plan.refresh_from_db()
+        self.assertFalse(self.public_collab_plan.is_public)
+
+    def test_management_actions_require_confirmation_checkbox(self):
+        self.client.force_login(self.staff)
+
+        response = self.client.post(reverse("goals:management_user_deactivate", args=[self.target_user.pk]), {})
+        self.assertEqual(response.status_code, 302)
+        self.target_user.refresh_from_db()
+        self.assertTrue(self.target_user.is_active)
+
+        response = self.client.post(reverse("goals:management_list_make_private", args=[self.public_collab_plan.pk]), {})
+        self.assertEqual(response.status_code, 302)
+        self.public_collab_plan.refresh_from_db()
+        self.assertTrue(self.public_collab_plan.is_public)
+
+    def test_management_actions_require_post(self):
+        self.client.force_login(self.staff)
+
+        urls = [
+            reverse("goals:management_user_deactivate", args=[self.target_user.pk]),
+            reverse("goals:management_user_activate", args=[self.target_user.pk]),
+            reverse("goals:management_list_make_private", args=[self.public_collab_plan.pk]),
+        ]
+        for url in urls:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 405)
+
+    def test_management_actions_require_csrf(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(self.staff)
+
+        response = csrf_client.post(
+            reverse("goals:management_user_deactivate", args=[self.target_user.pk]),
+            {"confirm": "1"},
+        )
+        self.assertEqual(response.status_code, 403)
+
+        response = csrf_client.post(
+            reverse("goals:management_list_make_private", args=[self.public_collab_plan.pk]),
+            {"confirm": "1"},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_django_admin_has_operational_models_registered(self):
+        expected_models = {
+            Profile,
+            FollowRequest,
+            CollaborationInvite,
+            GoalImage,
+            GoalLink,
+            LikeList,
+            SavedList,
+            SavedItem,
+            WantToTry,
+            Follow,
+            TogetherRequest,
+            ListComment,
+            YearPlan,
+            YearlyGoal,
+            UserActivity,
+        }
+        for model in expected_models:
+            with self.subTest(model=model.__name__):
+                self.assertIn(model, admin.site._registry)
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class ToggleDoneMethodAndPermissionTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.owner = User.objects.create_user(username="toggle_owner", email="toggle_owner@example.com", password="password12345")
+        self.collaborator = User.objects.create_user(username="toggle_collab", email="toggle_collab@example.com", password="password12345")
+        self.stranger = User.objects.create_user(username="toggle_stranger", email="toggle_stranger@example.com", password="password12345")
+
+        self.private_plan = YearPlan.objects.create(
+            user=self.owner,
+            year=2026,
+            list_title="非公開リスト",
+            target_count=10,
+            is_public=False,
+            is_collaborative=True,
+        )
+        self.private_plan.collaborators.add(self.collaborator)
+
+        self.yearly_goal = YearlyGoal.objects.create(
+            user=self.owner,
+            year_plan=self.private_plan,
+            title="年間TODO",
+            category="other",
+            item_is_public=True,
+            is_done=False,
+            added_by=self.owner,
+        )
+        today = timezone.localdate()
+        self.monthly_goal = MonthlyGoal.objects.create(
+            user=self.owner,
+            month=today.replace(day=1),
+            target_month=today.replace(day=1),
+            title="月TODO",
+            is_done=False,
+        )
+        week_start = today - timedelta(days=today.weekday())
+        self.weekly_goal = WeeklyGoal.objects.create(
+            user=self.owner,
+            week_start=week_start,
+            week_start_date=week_start,
+            title="週TODO",
+            is_done=False,
+        )
+        self.today_task = TodayTask.objects.create(
+            user=self.owner,
+            date=today,
+            scheduled_date=today,
+            title="今日TODO",
+            is_done=False,
+        )
+
+    def test_post_with_valid_permissions_toggles_state_for_all_models(self):
+        self.client.force_login(self.owner)
+
+        requests = [
+            (reverse("goals:toggle_done", args=["yearly", self.yearly_goal.pk]), {"is_done": "1"}),
+            (reverse("goals:toggle_done", args=["monthly", self.monthly_goal.pk]), {}),
+            (reverse("goals:toggle_done", args=["weekly", self.weekly_goal.pk]), {}),
+            (reverse("goals:toggle_done", args=["today", self.today_task.pk]), {}),
+        ]
+        for url, payload in requests:
+            with self.subTest(url=url):
+                response = self.client.post(url, payload)
+                self.assertEqual(response.status_code, 302)
+
+        self.yearly_goal.refresh_from_db()
+        self.monthly_goal.refresh_from_db()
+        self.weekly_goal.refresh_from_db()
+        self.today_task.refresh_from_db()
+        self.assertTrue(self.yearly_goal.is_done)
+        self.assertTrue(self.monthly_goal.is_done)
+        self.assertTrue(self.weekly_goal.is_done)
+        self.assertTrue(self.today_task.is_done)
+
+    def test_post_allows_collaborator_to_toggle_yearly_goal(self):
+        self.client.force_login(self.collaborator)
+
+        response = self.client.post(reverse("goals:toggle_done", args=["yearly", self.yearly_goal.pk]), {"is_done": "1"})
+
+        self.assertEqual(response.status_code, 302)
+        self.yearly_goal.refresh_from_db()
+        self.assertTrue(self.yearly_goal.is_done)
+
+    def test_get_returns_405_and_never_changes_state_for_all_models(self):
+        self.client.force_login(self.owner)
+
+        urls = [
+            reverse("goals:toggle_done", args=["yearly", self.yearly_goal.pk]),
+            reverse("goals:toggle_done", args=["monthly", self.monthly_goal.pk]),
+            reverse("goals:toggle_done", args=["weekly", self.weekly_goal.pk]),
+            reverse("goals:toggle_done", args=["today", self.today_task.pk]),
+        ]
+        for url in urls:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 405)
+
+        self.yearly_goal.refresh_from_db()
+        self.monthly_goal.refresh_from_db()
+        self.weekly_goal.refresh_from_db()
+        self.today_task.refresh_from_db()
+        self.assertFalse(self.yearly_goal.is_done)
+        self.assertFalse(self.monthly_goal.is_done)
+        self.assertFalse(self.weekly_goal.is_done)
+        self.assertFalse(self.today_task.is_done)
+
+    def test_anonymous_post_cannot_change_state(self):
+        response = self.client.post(reverse("goals:toggle_done", args=["monthly", self.monthly_goal.pk]))
+
+        self.assertEqual(response.status_code, 302)
+        self.monthly_goal.refresh_from_db()
+        self.assertFalse(self.monthly_goal.is_done)
+
+    def test_user_without_permission_cannot_toggle_yearly_goal(self):
+        self.client.force_login(self.stranger)
+
+        response = self.client.post(reverse("goals:toggle_done", args=["yearly", self.yearly_goal.pk]))
+
+        self.assertEqual(response.status_code, 403)
+        self.yearly_goal.refresh_from_db()
+        self.assertFalse(self.yearly_goal.is_done)
+
+    def test_user_without_permission_cannot_toggle_other_users_monthly_weekly_today(self):
+        self.client.force_login(self.stranger)
+
+        urls = [
+            reverse("goals:toggle_done", args=["monthly", self.monthly_goal.pk]),
+            reverse("goals:toggle_done", args=["weekly", self.weekly_goal.pk]),
+            reverse("goals:toggle_done", args=["today", self.today_task.pk]),
+        ]
+        for url in urls:
+            with self.subTest(url=url):
+                response = self.client.post(url)
+                self.assertEqual(response.status_code, 404)
+
+        self.monthly_goal.refresh_from_db()
+        self.weekly_goal.refresh_from_db()
+        self.today_task.refresh_from_db()
+        self.assertFalse(self.monthly_goal.is_done)
+        self.assertFalse(self.weekly_goal.is_done)
+        self.assertFalse(self.today_task.is_done)
+
+    def test_csrf_missing_post_is_rejected_and_state_unchanged(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(self.owner)
+
+        urls = [
+            reverse("goals:toggle_done", args=["yearly", self.yearly_goal.pk]),
+            reverse("goals:toggle_done", args=["monthly", self.monthly_goal.pk]),
+            reverse("goals:toggle_done", args=["weekly", self.weekly_goal.pk]),
+            reverse("goals:toggle_done", args=["today", self.today_task.pk]),
+        ]
+        for url in urls:
+            with self.subTest(url=url):
+                response = csrf_client.post(url)
+                self.assertEqual(response.status_code, 403)
+
+        self.yearly_goal.refresh_from_db()
+        self.monthly_goal.refresh_from_db()
+        self.weekly_goal.refresh_from_db()
+        self.today_task.refresh_from_db()
+        self.assertFalse(self.yearly_goal.is_done)
+        self.assertFalse(self.monthly_goal.is_done)
+        self.assertFalse(self.weekly_goal.is_done)
+        self.assertFalse(self.today_task.is_done)
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class PasswordResetResendTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="resetuser",
+            email="resetuser@example.com",
+            password="password12345",
+        )
+
+    @override_settings(
+        IS_PRODUCTION=False,
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        DEFAULT_FROM_EMAIL="Wishly <noreply@example.com>",
+    )
+    def test_password_reset_local_uses_existing_backend_and_generates_uid_token_link(self):
+        response = self.client.post(reverse("password_reset"), {"email": self.user.email})
+
+        self.assertRedirects(response, reverse("password_reset_done"), fetch_redirect_response=False)
+        self.assertEqual(len(mail.outbox), 1)
+        sent = mail.outbox[0]
+        self.assertEqual(sent.to, [self.user.email])
+        self.assertEqual(sent.from_email, "Wishly <noreply@example.com>")
+        self.assertIn("Wishly パスワード再設定", sent.subject)
+        self.assertRegex(sent.body, r"/accounts/reset/[0-9A-Za-z_\-]+/[0-9A-Za-z\-]+/")
+
+    @override_settings(
+        IS_PRODUCTION=True,
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        DEFAULT_FROM_EMAIL="Wishly <noreply@example.com>",
+    )
+    def test_password_reset_in_production_calls_resend_for_existing_user(self):
+        resend_send = Mock(return_value={"id": "email_test_id"})
+        resend_module = SimpleNamespace(api_key="", Emails=SimpleNamespace(send=resend_send))
+
+        with patch.dict(os.environ, {"RESEND_API_KEY": "test_resend_key"}, clear=False):
+            with patch("goals.forms.settings.RESEND_API_KEY", "test_resend_key"):
+                with patch("goals.forms.importlib.import_module", return_value=resend_module):
+                    response = self.client.post(reverse("password_reset"), {"email": self.user.email})
+
+        self.assertRedirects(response, reverse("password_reset_done"), fetch_redirect_response=False)
+        resend_send.assert_called_once()
+        payload = resend_send.call_args.args[0]
+        self.assertEqual(payload["to"], [self.user.email])
+        self.assertEqual(payload["from"], "Wishly <noreply@example.com>")
+        self.assertIn("Wishly パスワード再設定", payload["subject"])
+        self.assertRegex(payload["text"], r"/accounts/reset/[0-9A-Za-z_\-]+/[0-9A-Za-z\-]+/")
+
+    @override_settings(
+        IS_PRODUCTION=True,
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        DEFAULT_FROM_EMAIL="Wishly <noreply@example.com>",
+    )
+    def test_password_reset_done_redirect_is_kept_when_resend_fails_and_secrets_not_exposed(self):
+        resend_send = Mock(side_effect=RuntimeError("RESEND_API_KEY=leaked_value"))
+        resend_module = SimpleNamespace(api_key="", Emails=SimpleNamespace(send=resend_send))
+
+        with patch.dict(os.environ, {"RESEND_API_KEY": "test_resend_key"}, clear=False):
+            with patch("goals.forms.settings.RESEND_API_KEY", "test_resend_key"):
+                with patch("goals.forms.importlib.import_module", return_value=resend_module):
+                    response = self.client.post(reverse("password_reset"), {"email": self.user.email}, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "registration/password_reset_done.html")
+        self.assertNotContains(response, "test_resend_key")
+        self.assertNotContains(response, "leaked_value")
+
+    @override_settings(
+        IS_PRODUCTION=True,
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        DEFAULT_FROM_EMAIL="Wishly <noreply@example.com>",
+    )
+    def test_unknown_email_does_not_call_resend_and_still_redirects_done(self):
+        resend_send = Mock(return_value={"id": "email_test_id"})
+        resend_module = SimpleNamespace(api_key="", Emails=SimpleNamespace(send=resend_send))
+
+        with patch.dict(os.environ, {"RESEND_API_KEY": "test_resend_key"}, clear=False):
+            with patch("goals.forms.settings.RESEND_API_KEY", "test_resend_key"):
+                with patch("goals.forms.importlib.import_module", return_value=resend_module):
+                    response = self.client.post(reverse("password_reset"), {"email": "unknown@example.com"})
+
+        self.assertRedirects(response, reverse("password_reset_done"), fetch_redirect_response=False)
+        resend_send.assert_not_called()
+
+    def test_resend_api_key_is_not_hardcoded_in_password_reset_form_source(self):
+        source = inspect.getsource(goals_forms.ResendPasswordResetForm)
+        self.assertIn("RESEND_API_KEY", source)
+        self.assertNotRegex(source, r"re_[A-Za-z0-9]{10,}")
+
+    def test_account_settings_does_not_show_verification_resend_ui(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("goals:account_settings"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "認証メールを再送する")
+        self.assertNotContains(response, "メールアドレスがまだ確認されていません")
+
+    def test_login_and_password_change_pages_still_work(self):
+        login_response = self.client.get(reverse("login"))
+        self.assertEqual(login_response.status_code, 200)
+        self.assertContains(login_response, "パスワードをお忘れですか？")
+
+        self.client.force_login(self.user)
+        password_change_response = self.client.get(reverse("password_change"))
+        self.assertEqual(password_change_response.status_code, 200)

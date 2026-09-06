@@ -1,16 +1,20 @@
 import base64
 import binascii
+import importlib
 import io
+import logging
 import re
 import uuid
 from datetime import timedelta
 
 from django import forms
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth import authenticate
-from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.contrib.auth.forms import AuthenticationForm, PasswordResetForm, UserCreationForm
 from django.core.files.base import ContentFile
 from django.db.models import Q
+from django.template.loader import render_to_string
 from django.utils import timezone
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -51,6 +55,7 @@ IMAGE_EXTENSIONS = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp"}
 PRESERVED_IMAGE_FORMATS = {"JPEG", "PNG", "WEBP"}
 IMAGE_ACCEPT_ATTR = "image/*"
 UNREADABLE_IMAGE_ERROR = "この画像を読み込めませんでした。別の画像を選択してください。"
+logger = logging.getLogger(__name__)
 
 
 def safe_image_name(prefix, image_format):
@@ -301,6 +306,56 @@ class EmailOrUsernameAuthenticationForm(AuthenticationForm):
                 raise self.get_invalid_login_error()
             self.confirm_login_allowed(self.user_cache)
         return self.cleaned_data
+
+
+class ResendPasswordResetForm(PasswordResetForm):
+    def _should_use_resend(self):
+        return bool(getattr(settings, "IS_PRODUCTION", False) and getattr(settings, "RESEND_API_KEY", ""))
+
+    def send_mail(
+        self,
+        subject_template_name,
+        email_template_name,
+        context,
+        from_email,
+        to_email,
+        html_email_template_name=None,
+    ):
+        if not self._should_use_resend():
+            return super().send_mail(
+                subject_template_name,
+                email_template_name,
+                context,
+                from_email,
+                to_email,
+                html_email_template_name,
+            )
+
+        try:
+            resend = importlib.import_module("resend")
+            resend.api_key = settings.RESEND_API_KEY
+
+            subject = "".join(render_to_string(subject_template_name, context).splitlines()).strip()
+            text_body = render_to_string(email_template_name, context)
+            params = {
+                "from": from_email or settings.DEFAULT_FROM_EMAIL,
+                "to": [to_email],
+                "subject": subject,
+                "text": text_body,
+            }
+            if html_email_template_name:
+                params["html"] = render_to_string(html_email_template_name, context)
+            resend.Emails.send(params)
+        except Exception as exc:
+            user = context.get("user")
+            user_id = getattr(user, "pk", None)
+            logger.warning(
+                "Password reset email delivery failed via Resend. user_id=%s error_type=%s",
+                user_id,
+                exc.__class__.__name__,
+            )
+            # Keep default password reset UX stable and avoid leaking internals.
+            return
 
 
 class SignUpForm(UserCreationForm):

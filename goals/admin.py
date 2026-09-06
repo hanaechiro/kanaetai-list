@@ -3,12 +3,21 @@ from django.contrib import admin
 from .models import (
     CollaborationInvite,
     FollowRequest,
+    Follow,
+    GoalImage,
+    GoalLink,
     GoalSetting,
     IdeaMemo,
+    LikeList,
+    ListComment,
     MonthlyGoal,
     Profile,
+    SavedItem,
+    SavedList,
     TodayTask,
+    TogetherRequest,
     UserActivity,
+    WantToTry,
     WeeklyGoal,
     YearlyGoal,
     YearPlan,
@@ -88,5 +97,81 @@ class UserActivityAdmin(admin.ModelAdmin):
     list_display = ("user", "date", "last_seen_at", "request_count")
     list_filter = ("date",)
     search_fields = ("user__username", "user__email")
+
+
+@admin.register(GoalLink)
+class GoalLinkAdmin(admin.ModelAdmin):
+    list_display = ("goal", "title", "url", "created_at")
+    search_fields = ("title", "url", "goal__title")
+    list_filter = ("created_at",)
+    ordering = ("-created_at",)
+
+
+@admin.register(GoalImage)
+class GoalImageAdmin(admin.ModelAdmin):
+    list_display = ("goal", "caption", "created_at")
+    search_fields = ("caption", "goal__title")
+    list_filter = ("created_at",)
+    ordering = ("-created_at",)
+
+
+@admin.register(SavedList)
+class SavedListAdmin(admin.ModelAdmin):
+    list_display = ("user", "my_list", "created_at")
+    search_fields = ("user__username", "user__email", "my_list__list_title")
+    list_filter = ("created_at",)
+    ordering = ("-created_at",)
+
+
+@admin.register(SavedItem)
+class SavedItemAdmin(admin.ModelAdmin):
+    list_display = ("user", "item", "created_at")
+    search_fields = ("user__username", "user__email", "item__title")
+    list_filter = ("created_at",)
+    ordering = ("-created_at",)
+
+
+@admin.register(LikeList)
+class LikeListAdmin(admin.ModelAdmin):
+    list_display = ("user", "my_list", "created_at")
+    search_fields = ("user__username", "user__email", "my_list__list_title")
+    list_filter = ("created_at",)
+    ordering = ("-created_at",)
+
+
+@admin.register(WantToTry)
+class WantToTryAdmin(admin.ModelAdmin):
+    list_display = ("user", "source_item", "created_at")
+    search_fields = ("user__username", "user__email", "source_item__title")
+    list_filter = ("created_at",)
+    ordering = ("-created_at",)
+
+
+@admin.register(Follow)
+class FollowAdmin(admin.ModelAdmin):
+    list_display = ("follower", "following", "created_at")
+    search_fields = ("follower__username", "following__username")
+    list_filter = ("created_at",)
+    ordering = ("-created_at",)
+
+
+@admin.register(TogetherRequest)
+class TogetherRequestAdmin(admin.ModelAdmin):
+    list_display = ("requester", "receiver", "list_item", "status", "created_at")
+    search_fields = ("requester__username", "receiver__username", "list_item__title")
+    list_filter = ("status", "created_at")
+    ordering = ("-created_at",)
+
+
+@admin.register(ListComment)
+class ListCommentAdmin(admin.ModelAdmin):
+    list_display = ("user", "my_list", "created_at", "short_body")
+    search_fields = ("user__username", "my_list__list_title", "body")
+    list_filter = ("created_at",)
+    ordering = ("-created_at",)
+
+    @admin.display(description="コメント")
+    def short_body(self, obj):
+        return obj.body[:40]
 
 # Register your models here.

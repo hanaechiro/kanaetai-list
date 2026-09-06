@@ -24,6 +24,34 @@
                 <tr><th>アカウント状態</th><td>{% if managed_user.is_active %}<span class="badge public">有効</span>{% else %}<span class="badge private">停止中</span>{% endif %}</td></tr>
             </tbody>
         </table>
+        <div style="padding: 16px 18px; border-top: 1px solid var(--mgmt-border);">
+            <h3 style="margin: 0 0 10px; font-size: 15px;">アカウント操作</h3>
+            {% if is_self %}
+                <p class="management-muted" style="margin: 0;">自分自身のアカウントは停止できません。</p>
+            {% elif managed_user.is_active %}
+                <form method="post" action="{% url 'goals:management_user_deactivate' managed_user.pk %}">
+                    {% csrf_token %}
+                    <label style="display: inline-flex; gap: 6px; align-items: center; margin-bottom: 10px;">
+                        <input type="checkbox" name="confirm" value="1">
+                        <span>このユーザーを停止することを確認しました</span>
+                    </label>
+                    <div>
+                        <button class="management-button" type="submit">ユーザーを停止</button>
+                    </div>
+                </form>
+            {% else %}
+                <form method="post" action="{% url 'goals:management_user_activate' managed_user.pk %}">
+                    {% csrf_token %}
+                    <label style="display: inline-flex; gap: 6px; align-items: center; margin-bottom: 10px;">
+                        <input type="checkbox" name="confirm" value="1">
+                        <span>このユーザーの停止を解除することを確認しました</span>
+                    </label>
+                    <div>
+                        <button class="management-button" type="submit">停止を解除</button>
+                    </div>
+                </form>
+            {% endif %}
+        </div>
     </section>
 
     <section class="management-card">
@@ -36,6 +64,34 @@
                 </article>
             {% endfor %}
         </div>
+    </section>
+
+    <section class="management-card">
+        <div class="management-card-header"><h2>このユーザーが作成したリスト</h2></div>
+        <table class="management-table">
+            <thead>
+                <tr>
+                    <th>リスト名</th>
+                    <th>公開状態</th>
+                    <th>共同</th>
+                    <th>登録項目数</th>
+                    <th>作成日時</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for plan in created_lists %}
+                    <tr>
+                        <td><a href="{% url 'goals:management_list_detail' plan.pk %}">{{ plan.list_title|default:"無題のリスト" }}</a></td>
+                        <td>{% if plan.is_public %}<span class="badge public">公開</span>{% else %}<span class="badge private">非公開</span>{% endif %}</td>
+                        <td>{% if plan.is_collaborative %}<span class="badge">共同</span>{% else %}<span class="management-muted">-</span>{% endif %}</td>
+                        <td>{{ plan.item_count }}</td>
+                        <td>{% if plan.created_at %}{{ plan.created_at|date:"Y/m/d H:i" }}{% else %}<span class="management-muted">記録なし</span>{% endif %}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="5" class="management-muted">作成済みのリストはありません。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </section>
 </div>
 {% endblock %}

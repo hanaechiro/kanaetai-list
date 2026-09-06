@@ -1177,10 +1177,15 @@ def create_hub(request):
 
 @staff_member_required
 def staff_dashboard(request):
+    today = timezone.localdate()
+    metrics = [
+        {"label": "総ユーザー数", "value": get_user_model().objects.count()},
+        {"label": "総リスト数", "value": YearPlan.objects.count()},
+        {"label": "総項目数", "value": YearlyGoal.objects.count()},
+    ]
     return render(request, "goals/staff_dashboard.html", {
-        "user_count": get_user_model().objects.count(),
-        "list_count": YearPlan.objects.count(),
-        "item_count": YearlyGoal.objects.count(),
+        "today": today,
+        "metrics": metrics,
     })
 
 
@@ -1207,21 +1212,59 @@ def management_chart_rows(start_date, end_date):
     return {"width": width, "height": height, "rows": rows, "points": " ".join(f"{row['x']},{row['y']}" for row in rows)}
 
 
+def management_daily_count_chart_rows(queryset, date_field, start_date, end_date):
+    rows_by_date = {
+        row[f"{date_field}__date"]: row["count"]
+        for row in queryset.filter(**{f"{date_field}__date__gte": start_date, f"{date_field}__date__lte": end_date})
+        .values(f"{date_field}__date").annotate(count=Count("id"))
+    }
+    dates = []
+    current = start_date
+    while current <= end_date:
+        dates.append(current)
+        current += timedelta(days=1)
+    max_count = max([rows_by_date.get(day, 0) for day in dates] + [1])
+    width, height = 720, 220
+    usable_width, usable_height = 652, 164
+    rows = []
+    for index, day in enumerate(dates):
+        x = 34 + (usable_width * index / max(len(dates) - 1, 1))
+        count = rows_by_date.get(day, 0)
+        y = 192 - (usable_height * count / max_count)
+        rows.append({"date": day, "count": count, "x": round(x, 1), "y": round(y, 1)})
+    return {"width": width, "height": height, "rows": rows, "points": " ".join(f"{row['x']},{row['y']}" for row in rows)}
+
+
+def management_period_start_date(queryset, date_field, period, today):
+    if period == "all":
+        first_created_at = queryset.order_by(date_field).values_list(date_field, flat=True).first()
+        return first_created_at.date() if first_created_at else today
+    days = {"7": 7, "30": 30, "90": 90}.get(period, 30)
+    return today - timedelta(days=days - 1)
+
+
 @staff_member_required
 def management_dashboard(request):
     today = timezone.localdate()
-    period = request.GET.get("period", "30")
-    days = {"7": 7, "30": 30, "90": 90}.get(period, 30)
-    start_date = today - timedelta(days=days - 1)
     users = get_user_model().objects.all()
+    period = request.GET.get("period", "30")
+    user_start_date = management_period_start_date(users, "date_joined", period, today)
+    list_start_date = management_period_start_date(YearPlan.objects.all(), "created_at", period, today)
+    item_start_date = management_period_start_date(YearlyGoal.objects.all(), "created_at", period, today)
+
+    total_lists = YearPlan.objects.count()
+    total_items = YearlyGoal.objects.count()
     kpis = [
         {"label": "総ユーザー数", "value": users.count()},
-        {"label": "今日の新規登録", "value": users.filter(date_joined__date=today).count()},
-        {"label": "過去7日間の新規登録", "value": users.filter(date_joined__date__gte=today - timedelta(days=6)).count()},
-        {"label": "過去30日間の新規登録", "value": users.filter(date_joined__date__gte=today - timedelta(days=29)).count()},
-        {"label": "総リスト数", "value": YearPlan.objects.count()},
-        {"label": "総リスト項目数", "value": YearlyGoal.objects.count()},
+        {"label": "今日の新規登録数", "value": users.filter(date_joined__date=today).count()},
+        {"label": "過去7日の新規登録数", "value": users.filter(date_joined__date__gte=today - timedelta(days=6)).count()},
+        {"label": "過去30日の新規登録数", "value": users.filter(date_joined__date__gte=today - timedelta(days=29)).count()},
+        {"label": "総リスト数", "value": total_lists},
+        {"label": "総項目数", "value": total_items},
         {"label": "達成済み項目数", "value": YearlyGoal.objects.filter(is_done=True).count()},
+        {"label": "公開リスト数", "value": YearPlan.objects.filter(is_public=True).count()},
+        {"label": "非公開リスト数", "value": YearPlan.objects.filter(is_public=False).count()},
+        {"label": "共同リスト数", "value": YearPlan.objects.filter(is_collaborative=True).count()},
     ]
     usage_stats = [
         {"label": "本日作成されたリスト", "value": YearPlan.objects.filter(created_at__date=today).count()},
@@ -1236,11 +1279,15 @@ def management_dashboard(request):
         for item in YearPlan.objects.select_related("user").order_by("-created_at", "-updated_at")[:5]
     ]
     return render(request, "goals/management/dashboard.html", {
+        "active_management_nav": "dashboard",
         "kpis": kpis,
         "usage_stats": usage_stats,
-        "chart": management_chart_rows(start_date, today),
+        "user_chart": management_chart_rows(user_start_date, today),
+        "list_chart": management_daily_count_chart_rows(YearPlan.objects.all(), "created_at", list_start_date, today),
+        "item_chart": management_daily_count_chart_rows(YearlyGoal.objects.all(), "created_at", item_start_date, today),
         "recent_activities": recent_activities,
         "data_notes": ["DAU/WAU/MAUはUserActivityが蓄積された範囲で今後拡張できます。"],
+        "period": period if period in {"7", "30", "90", "all"} else "30",
     })
 
 
@@ -1258,6 +1305,7 @@ def management_users(request):
         users = users.filter(Q(username__icontains=query) | Q(email__icontains=query))
     users = users.order_by("date_joined" if sort == "old" else "-date_joined")
     return render(request, "goals/management/users.html", {
+        "active_management_nav": "users",
         "page_obj": Paginator(users, 30).get_page(request.GET.get("page")),
         "query": query,
         "sort": sort,
@@ -1268,6 +1316,9 @@ def management_users(request):
 def management_user_detail(request, pk):
     managed_user = get_object_or_404(get_user_model().objects.select_related("profile"), pk=pk)
     managed_user.last_activity_at = UserActivity.objects.filter(user=managed_user).aggregate(Max("last_seen_at"))["last_seen_at__max"]
+    created_lists = YearPlan.objects.filter(user=managed_user).annotate(
+        item_count=Count("goals", distinct=True),
+    ).order_by("-created_at", "-updated_at")
     stats = {
         "リスト数": YearPlan.objects.filter(user=managed_user).count(),
         "項目数": YearlyGoal.objects.filter(user=managed_user).count(),
@@ -1278,7 +1329,45 @@ def management_user_detail(request, pk):
         "保存したリスト数": SavedList.objects.filter(user=managed_user).count(),
         "保存した項目数": SavedItem.objects.filter(user=managed_user).count(),
     }
-    return render(request, "goals/management/user_detail.html", {"managed_user": managed_user, "stats": stats})
+    return render(request, "goals/management/user_detail.html", {
+        "active_management_nav": "users",
+        "managed_user": managed_user,
+        "stats": stats,
+        "created_lists": created_lists,
+        "is_self": request.user.pk == managed_user.pk,
+    })
+
+
+@require_POST
+@staff_member_required
+def management_user_deactivate(request, pk):
+    managed_user = get_object_or_404(get_user_model(), pk=pk)
+    if managed_user.pk == request.user.pk:
+        messages.error(request, "自分自身を停止することはできません。")
+    elif request.POST.get("confirm") != "1":
+        messages.error(request, "確認チェックを入れてから実行してください。")
+    elif not managed_user.is_active:
+        messages.info(request, "このユーザーはすでに停止中です。")
+    else:
+        managed_user.is_active = False
+        managed_user.save(update_fields=["is_active"])
+        messages.success(request, "ユーザーを停止しました。")
+    return redirect("goals:management_user_detail", pk=managed_user.pk)
+
+
+@require_POST
+@staff_member_required
+def management_user_activate(request, pk):
+    managed_user = get_object_or_404(get_user_model(), pk=pk)
+    if request.POST.get("confirm") != "1":
+        messages.error(request, "確認チェックを入れてから実行してください。")
+    elif managed_user.is_active:
+        messages.info(request, "このユーザーはすでに有効です。")
+    else:
+        managed_user.is_active = True
+        managed_user.save(update_fields=["is_active"])
+        messages.success(request, "ユーザー停止を解除しました。")
+    return redirect("goals:management_user_detail", pk=managed_user.pk)
 
 
 @staff_member_required
@@ -1299,10 +1388,45 @@ def management_lists(request):
         lists = lists.filter(is_public=False)
     lists = lists.order_by("-created_at", "-updated_at")
     return render(request, "goals/management/lists.html", {
+        "active_management_nav": "lists",
         "page_obj": Paginator(lists, 30).get_page(request.GET.get("page")),
         "query": query,
         "visibility": visibility,
     })
+
+
+@staff_member_required
+def management_list_detail(request, pk):
+    managed_list = get_object_or_404(
+        YearPlan.objects.select_related("user").annotate(
+            item_count=Count("goals", distinct=True),
+            done_count=Count("goals", filter=Q(goals__is_done=True), distinct=True),
+        ),
+        pk=pk,
+    )
+    list_items = YearlyGoal.objects.filter(year_plan=managed_list).select_related(
+        "added_by", "completed_by",
+    ).order_by("created_at")
+    return render(request, "goals/management/list_detail.html", {
+        "active_management_nav": "lists",
+        "managed_list": managed_list,
+        "list_items": list_items,
+    })
+
+
+@require_POST
+@staff_member_required
+def management_list_make_private(request, pk):
+    managed_list = get_object_or_404(YearPlan, pk=pk)
+    if request.POST.get("confirm") != "1":
+        messages.error(request, "確認チェックを入れてから実行してください。")
+    elif not managed_list.is_public:
+        messages.info(request, "このリストはすでに非公開です。")
+    else:
+        managed_list.is_public = False
+        managed_list.save(update_fields=["is_public"])
+        messages.success(request, "リストを非公開にしました。")
+    return redirect("goals:management_list_detail", pk=managed_list.pk)
 
 
 @staff_member_required
@@ -1319,7 +1443,11 @@ def management_templates(request):
             "usage_label": usage_count,
         })
     templates.sort(key=lambda item: item["usage_count"], reverse=(sort != "usage_asc"))
-    return render(request, "goals/management/templates.html", {"templates": templates, "sort": sort})
+    return render(request, "goals/management/templates.html", {
+        "active_management_nav": "templates",
+        "templates": templates,
+        "sort": sort,
+    })
 
 
 def signup(request):
@@ -1873,7 +2001,7 @@ def my_list_detail(request, pk):
     goals = all_goals
     done_count = all_goals.filter(is_done=True).count()
     total_count = all_goals.count()
-    year_plan.progress_percent = progress_percent(done_count, year_plan.target_count)
+    year_plan.progress_percent = progress_percent(done_count, total_count)
     total_pages = max(ceil(total_count / 20), 1)
     try:
         current_page = int(request.GET.get("page", "1"))
@@ -2254,7 +2382,7 @@ def build_public_list_groups(plans, request_user=None, category="", request=None
 
     for group in grouped_goals:
         group["progress_percent"] = progress_percent(group["done_count"], group["total_count"])
-        group["target_progress_percent"] = progress_percent(group["done_count"], group["target_count"])
+        group["target_progress_percent"] = progress_percent(group["done_count"], group["total_count"])
         category_labels = []
         seen_categories = set()
         for goal in group["goals"]:
@@ -2869,6 +2997,7 @@ def delete_goal_image(request, pk):
     return redirect("goals:yearly_goal_edit", pk=goal.pk)
 
 
+@require_POST
 def toggle_done(request, model_name, pk):
     model_map = {
         "yearly": YearlyGoal,

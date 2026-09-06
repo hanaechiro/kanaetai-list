@@ -3,9 +3,12 @@
         <div class="item-title">{{ goal.title }}</div>
         <p class="meta">{{ goal.target_month|date:"Y年n月" }}</p>
         <div class="actions">
-            <a class="button" href="{% url 'goals:toggle_done' 'monthly' goal.pk %}">
-                {% if goal.is_done %}未達成に戻す{% else %}達成済みにする{% endif %}
-            </a>
+            <form method="post" action="{% url 'goals:toggle_done' 'monthly' goal.pk %}">
+                {% csrf_token %}
+                <button class="button" type="submit">
+                    {% if goal.is_done %}未達成に戻す{% else %}達成済みにする{% endif %}
+                </button>
+            </form>
             {% if show_actions %}
                 <a class="button" href="{% url 'goals:monthly_goal_edit' goal.pk %}">編集</a>
                 <a class="button danger" href="{% url 'goals:monthly_goal_delete' goal.pk %}">削除</a>

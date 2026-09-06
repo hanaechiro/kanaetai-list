@@ -168,6 +168,34 @@
         .management-danger {
             color: var(--mgmt-danger);
         }
+        .management-flash {
+            display: grid;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+        .management-flash p {
+            margin: 0;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--mgmt-border);
+            background: #fff;
+            color: var(--mgmt-text);
+        }
+        .management-flash p.success {
+            border-color: #abefc6;
+            background: #ecfdf3;
+            color: #027a48;
+        }
+        .management-flash p.error {
+            border-color: #fecdca;
+            background: #fef3f2;
+            color: #b42318;
+        }
+        .management-flash p.warning {
+            border-color: #fed7aa;
+            background: #fff7ed;
+            color: #b54708;
+        }
         .management-filter {
             display: flex;
             flex-wrap: wrap;
@@ -265,6 +293,13 @@
             </nav>
         </aside>
         <main class="management-main">
+            {% if messages %}
+                <section class="management-flash" aria-label="お知らせ">
+                    {% for message in messages %}
+                        <p class="{{ message.tags|default:'' }}">{{ message }}</p>
+                    {% endfor %}
+                </section>
+            {% endif %}
             {% block content %}{% endblock %}
         </main>
     </div>

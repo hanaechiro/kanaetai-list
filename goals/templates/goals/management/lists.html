@@ -30,6 +30,7 @@
                 <th>作成者</th>
                 <th>カテゴリ</th>
                 <th>公開状態</th>
+                <th>共同</th>
                 <th>作成日時</th>
                 <th>項目</th>
                 <th>達成</th>
@@ -41,10 +42,11 @@
             {% for list in page_obj %}
                 <tr>
                     <td>{{ list.id }}</td>
-                    <td>{{ list.list_title|default:"無題のリスト" }}</td>
+                    <td><a href="{% url 'goals:management_list_detail' list.pk %}">{{ list.list_title|default:"無題のリスト" }}</a></td>
                     <td>{{ list.user.username }}</td>
                     <td class="management-muted">リストカテゴリなし</td>
                     <td>{% if list.is_public %}<span class="badge public">公開</span>{% else %}<span class="badge private">非公開</span>{% endif %}</td>
+                    <td>{% if list.is_collaborative %}<span class="badge">共同</span>{% else %}<span class="management-muted">-</span>{% endif %}</td>
                     <td>{% if list.created_at %}{{ list.created_at|date:"Y/m/d H:i" }}{% else %}<span class="management-muted">記録なし</span>{% endif %}</td>
                     <td>{{ list.item_count }}</td>
                     <td>{{ list.done_count }}</td>
@@ -52,7 +54,7 @@
                     <td>{{ list.save_count }}</td>
                 </tr>
             {% empty %}
-                <tr><td colspan="10" class="management-muted">リストが見つかりません。</td></tr>
+                <tr><td colspan="11" class="management-muted">リストが見つかりません。</td></tr>
             {% endfor %}
         </tbody>
     </table>

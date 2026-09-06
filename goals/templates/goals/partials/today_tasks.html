@@ -3,9 +3,12 @@
         <div class="item-title">{{ task.title }}</div>
         <p class="meta">{{ task.scheduled_date|date:"Y年n月j日" }}</p>
         <div class="actions">
-            <a class="button" href="{% url 'goals:toggle_done' 'today' task.pk %}">
-                {% if task.is_done %}未完了に戻す{% else %}完了にする{% endif %}
-            </a>
+            <form method="post" action="{% url 'goals:toggle_done' 'today' task.pk %}">
+                {% csrf_token %}
+                <button class="button" type="submit">
+                    {% if task.is_done %}未完了に戻す{% else %}完了にする{% endif %}
+                </button>
+            </form>
             {% if show_actions %}
                 <a class="button" href="{% url 'goals:today_task_edit' task.pk %}">編集</a>
                 <a class="button danger" href="{% url 'goals:today_task_delete' task.pk %}">削除</a>

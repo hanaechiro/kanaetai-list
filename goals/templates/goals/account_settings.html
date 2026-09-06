@@ -208,15 +208,6 @@
                 </span>
                 <span class="settings-row-link">変更する</span>
             </a>
-            {% if request.user.email and not profile.email_verified %}
-                <div class="settings-warning">
-                    <p>メールアドレスがまだ確認されていません</p>
-                    <form class="settings-inline-form" method="post" action="{% url 'goals:resend_verification_email' %}">
-                        {% csrf_token %}
-                        <button class="settings-text-button" type="submit">認証メールを再送する</button>
-                    </form>
-                </div>
-            {% endif %}
             <a class="settings-row" href="{% url 'password_change' %}">
                 <span class="settings-row-title">パスワード</span>
                 <span class="settings-row-link">パスワードを変更</span>

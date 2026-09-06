@@ -25,19 +25,19 @@
         <div class="management-card-header">
             <h2>新規ユーザー登録数</h2>
             <div class="management-filter" style="margin: 0;">
-                <a class="management-button secondary" href="?period=7">7日</a>
-                <a class="management-button secondary" href="?period=30">30日</a>
-                <a class="management-button secondary" href="?period=90">90日</a>
-                <a class="management-button secondary" href="?period=all">全期間</a>
+                <a class="management-button {% if period == '7' %}{% else %}secondary{% endif %}" href="?period=7">7日</a>
+                <a class="management-button {% if period == '30' %}{% else %}secondary{% endif %}" href="?period=30">30日</a>
+                <a class="management-button {% if period == '90' %}{% else %}secondary{% endif %}" href="?period=90">90日</a>
+                <a class="management-button {% if period == 'all' %}{% else %}secondary{% endif %}" href="?period=all">全期間</a>
             </div>
         </div>
         <div style="padding: 18px;">
-            <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img" aria-label="新規ユーザー登録数の推移" style="width: 100%; height: auto; display: block;">
+            <svg viewBox="0 0 {{ user_chart.width }} {{ user_chart.height }}" role="img" aria-label="新規ユーザー登録数の推移" style="width: 100%; height: auto; display: block;">
                 <line x1="34" y1="192" x2="686" y2="192" stroke="#e1e4e8" />
                 <line x1="34" y1="28" x2="34" y2="192" stroke="#e1e4e8" />
-                {% if chart.points %}
-                    <polyline points="{{ chart.points }}" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
-                    {% for row in chart.rows %}
+                {% if user_chart.points %}
+                    <polyline points="{{ user_chart.points }}" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                    {% for row in user_chart.rows %}
                         <circle cx="{{ row.x }}" cy="{{ row.y }}" r="3.5" fill="#111" />
                     {% endfor %}
                 {% endif %}
@@ -45,8 +45,72 @@
             <table class="management-table" style="margin-top: 10px;">
                 <thead><tr><th>日付</th><th>新規登録ユーザー数</th></tr></thead>
                 <tbody>
-                    {% for row in chart.rows %}
+                    {% for row in user_chart.rows %}
                         <tr><td>{{ row.date|date:"Y/m/d" }}</td><td>{{ row.count }}人</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="management-card">
+        <div class="management-card-header">
+            <h2>新規リスト作成数</h2>
+            <div class="management-filter" style="margin: 0;">
+                <a class="management-button {% if period == '7' %}{% else %}secondary{% endif %}" href="?period=7">7日</a>
+                <a class="management-button {% if period == '30' %}{% else %}secondary{% endif %}" href="?period=30">30日</a>
+                <a class="management-button {% if period == '90' %}{% else %}secondary{% endif %}" href="?period=90">90日</a>
+                <a class="management-button {% if period == 'all' %}{% else %}secondary{% endif %}" href="?period=all">全期間</a>
+            </div>
+        </div>
+        <div style="padding: 18px;">
+            <svg viewBox="0 0 {{ list_chart.width }} {{ list_chart.height }}" role="img" aria-label="新規リスト作成数の推移" style="width: 100%; height: auto; display: block;">
+                <line x1="34" y1="192" x2="686" y2="192" stroke="#e1e4e8" />
+                <line x1="34" y1="28" x2="34" y2="192" stroke="#e1e4e8" />
+                {% if list_chart.points %}
+                    <polyline points="{{ list_chart.points }}" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                    {% for row in list_chart.rows %}
+                        <circle cx="{{ row.x }}" cy="{{ row.y }}" r="3.5" fill="#111" />
+                    {% endfor %}
+                {% endif %}
+            </svg>
+            <table class="management-table" style="margin-top: 10px;">
+                <thead><tr><th>日付</th><th>新規リスト作成数</th></tr></thead>
+                <tbody>
+                    {% for row in list_chart.rows %}
+                        <tr><td>{{ row.date|date:"Y/m/d" }}</td><td>{{ row.count }}件</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="management-card">
+        <div class="management-card-header">
+            <h2>新規項目作成数</h2>
+            <div class="management-filter" style="margin: 0;">
+                <a class="management-button {% if period == '7' %}{% else %}secondary{% endif %}" href="?period=7">7日</a>
+                <a class="management-button {% if period == '30' %}{% else %}secondary{% endif %}" href="?period=30">30日</a>
+                <a class="management-button {% if period == '90' %}{% else %}secondary{% endif %}" href="?period=90">90日</a>
+                <a class="management-button {% if period == 'all' %}{% else %}secondary{% endif %}" href="?period=all">全期間</a>
+            </div>
+        </div>
+        <div style="padding: 18px;">
+            <svg viewBox="0 0 {{ item_chart.width }} {{ item_chart.height }}" role="img" aria-label="新規項目作成数の推移" style="width: 100%; height: auto; display: block;">
+                <line x1="34" y1="192" x2="686" y2="192" stroke="#e1e4e8" />
+                <line x1="34" y1="28" x2="34" y2="192" stroke="#e1e4e8" />
+                {% if item_chart.points %}
+                    <polyline points="{{ item_chart.points }}" fill="none" stroke="#111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                    {% for row in item_chart.rows %}
+                        <circle cx="{{ row.x }}" cy="{{ row.y }}" r="3.5" fill="#111" />
+                    {% endfor %}
+                {% endif %}
+            </svg>
+            <table class="management-table" style="margin-top: 10px;">
+                <thead><tr><th>日付</th><th>新規項目作成数</th></tr></thead>
+                <tbody>
+                    {% for row in item_chart.rows %}
+                        <tr><td>{{ row.date|date:"Y/m/d" }}</td><td>{{ row.count }}件</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
