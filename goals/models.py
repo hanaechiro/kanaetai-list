@@ -554,6 +554,27 @@ class ListComment(models.Model):
         return f"{self.user}: {self.body[:20]}"
 
 
+class Inquiry(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_DONE = "done"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "未対応"),
+        (STATUS_DONE, "対応済み"),
+    ]
+
+    name = models.CharField("名前", max_length=80)
+    email = models.EmailField("返信先メールアドレス")
+    message = models.TextField("問い合わせ内容", max_length=2000)
+    status = models.CharField("対応状態", max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    created_at = models.DateTimeField("作成日時", auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.name} <{self.email}>"
+
+
 class UserActivity(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

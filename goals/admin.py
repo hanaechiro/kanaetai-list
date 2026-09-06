@@ -9,6 +9,7 @@ from .models import (
     GoalSetting,
     IdeaMemo,
     LikeList,
+    Inquiry,
     ListComment,
     MonthlyGoal,
     Profile,
@@ -173,5 +174,13 @@ class ListCommentAdmin(admin.ModelAdmin):
     @admin.display(description="コメント")
     def short_body(self, obj):
         return obj.body[:40]
+
+
+@admin.register(Inquiry)
+class InquiryAdmin(admin.ModelAdmin):
+    list_display = ("name", "email", "created_at", "status")
+    list_filter = ("status", "created_at")
+    search_fields = ("name", "email", "message")
+    ordering = ("-created_at",)
 
 # Register your models here.

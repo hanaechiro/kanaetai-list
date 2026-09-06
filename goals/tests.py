@@ -34,6 +34,7 @@ from .models import (
     GoalImage,
     GoalLink,
     IdeaMemo,
+    Inquiry,
     LikeList,
     ListComment,
     MonthlyGoal,
@@ -2554,3 +2555,122 @@ class PasswordResetResendTests(TestCase):
         self.client.force_login(self.user)
         password_change_response = self.client.get(reverse("password_change"))
         self.assertEqual(password_change_response.status_code, 200)
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class ContactAndLegalPagesTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="contactuser",
+            email="contactuser@example.com",
+            password="password12345",
+        )
+
+    def test_terms_and_privacy_pages_return_200(self):
+        self.assertEqual(self.client.get(reverse("goals:terms")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("goals:privacy_policy")).status_code, 200)
+
+    def test_contact_get_returns_200(self):
+        response = self.client.get(reverse("goals:contact"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "お問い合わせ")
+
+    def test_anonymous_user_can_submit_contact_form(self):
+        response = self.client.post(
+            reverse("goals:contact"),
+            {
+                "name": "匿名ユーザー",
+                "email": "anon@example.com",
+                "message": "公開前チェックについて質問です。",
+            },
+        )
+        self.assertRedirects(response, reverse("goals:contact_done"), fetch_redirect_response=False)
+        self.assertTrue(Inquiry.objects.filter(email="anon@example.com").exists())
+
+    def test_logged_in_user_can_submit_contact_form(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("goals:contact"),
+            {
+                "name": "ログインユーザー",
+                "email": "contactuser@example.com",
+                "message": "ログイン状態で送信します。",
+            },
+        )
+        self.assertRedirects(response, reverse("goals:contact_done"), fetch_redirect_response=False)
+        self.assertTrue(Inquiry.objects.filter(name="ログインユーザー").exists())
+
+    def test_contact_post_without_csrf_is_rejected(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+        response = csrf_client.post(
+            reverse("goals:contact"),
+            {
+                "name": "NoCSRF",
+                "email": "nocsrf@example.com",
+                "message": "csrfなし",
+            },
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Inquiry.objects.filter(email="nocsrf@example.com").exists())
+
+    def test_contact_required_validation_and_email_validation(self):
+        empty_response = self.client.post(reverse("goals:contact"), {"name": "", "email": "", "message": ""})
+        self.assertEqual(empty_response.status_code, 200)
+        form = empty_response.context["form"]
+        self.assertIn("このフィールドは必須です。", form.errors["name"]) 
+        self.assertIn("このフィールドは必須です。", form.errors["email"]) 
+        self.assertIn("このフィールドは必須です。", form.errors["message"]) 
+
+        invalid_email_response = self.client.post(
+            reverse("goals:contact"),
+            {"name": "テスト", "email": "not-an-email", "message": "本文"},
+        )
+        self.assertEqual(invalid_email_response.status_code, 200)
+        form = invalid_email_response.context["form"]
+        self.assertIn("有効なメールアドレスを入力してください。", form.errors["email"])
+
+    def test_contact_rejects_too_many_urls(self):
+        message = " ".join([f"https://example.com/{idx}" for idx in range(6)])
+        response = self.client.post(
+            reverse("goals:contact"),
+            {"name": "spam", "email": "spam@example.com", "message": message},
+        )
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        self.assertIn("URLの記載が多すぎます。内容を確認してください。", form.errors["message"])
+
+    def test_contact_post_saves_inquiry_with_pending_status(self):
+        self.client.post(
+            reverse("goals:contact"),
+            {
+                "name": "保存確認",
+                "email": "save@example.com",
+                "message": "DBに保存されるか確認します。",
+            },
+        )
+        inquiry = Inquiry.objects.get(email="save@example.com")
+        self.assertEqual(inquiry.status, Inquiry.STATUS_PENDING)
+        self.assertIsNotNone(inquiry.created_at)
+
+    def test_inquiry_model_is_registered_in_admin(self):
+        self.assertIn(Inquiry, admin.site._registry)
+
+    def test_signup_page_shows_terms_and_privacy_links(self):
+        response = self.client.get(reverse("goals:signup"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("goals:terms"))
+        self.assertContains(response, reverse("goals:privacy_policy"))
+        self.assertContains(response, "利用規約")
+        self.assertContains(response, "プライバシーポリシー")
+
+    def test_login_page_has_contact_link(self):
+        response = self.client.get(reverse("login"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("goals:contact"))
+
+    def test_existing_account_delete_flow_still_works(self):
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("goals:account_delete"))
+        self.assertRedirects(response, reverse("goals:home"), fetch_redirect_response=False)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.is_active)

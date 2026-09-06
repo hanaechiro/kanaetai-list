@@ -242,6 +242,16 @@
         gap: 8px;
         min-width: 0;
     }
+    .signup-legal-note {
+        margin-top: 12px;
+        color: var(--app-muted, #787774);
+        font-size: 12px;
+        line-height: 1.6;
+    }
+    .signup-legal-note a {
+        color: var(--app-text, #37352f);
+        font-weight: 600;
+    }
     .goal-image-edit-card img {
         width: 100%;
         aspect-ratio: 1 / 1;
@@ -326,6 +336,15 @@
             {% endfor %}
         </div>
     {% endfor %}
+    {% if request.resolver_match.url_name == 'signup' %}
+        <p class="signup-legal-note">
+            登録することで
+            <a href="{% url 'goals:terms' %}">利用規約</a>
+            および
+            <a href="{% url 'goals:privacy_policy' %}">プライバシーポリシー</a>
+            に同意したものとみなします。
+        </p>
+    {% endif %}
 </form>
 
 {% if goal_resource_manager %}

@@ -28,6 +28,7 @@ from .forms import (
     IdeaMemoForm,
     GoalImageForm,
     GoalLinkForm,
+    InquiryForm,
     ListCommentForm,
     MonthlyGoalForm,
     ProfileForm,
@@ -69,6 +70,8 @@ from .template_data import TEMPLATE_CATEGORIES
 
 
 USERNAME_DUPLICATE_ERROR = "このユーザーネームはすでに使用されています。"
+INQUIRY_POST_INTERVAL_SECONDS = 60
+INQUIRY_LAST_POSTED_AT_SESSION_KEY = "inquiry_last_posted_at"
 
 
 LIST_TEMPLATES = [
@@ -1173,6 +1176,42 @@ def service_worker(request):
 
 def create_hub(request):
     return render(request, "goals/create_hub.html")
+
+
+def terms(request):
+    return render(request, "goals/terms.html")
+
+
+def privacy_policy(request):
+    return render(request, "goals/privacy_policy.html")
+
+
+def contact(request):
+    initial = {}
+    if request.user.is_authenticated:
+        profile = getattr(request.user, "profile", None)
+        initial["name"] = (getattr(profile, "display_name", "") or request.user.username)
+        initial["email"] = request.user.email
+
+    if request.method == "POST":
+        form = InquiryForm(request.POST)
+        if form.is_valid():
+            last_posted_at = request.session.get(INQUIRY_LAST_POSTED_AT_SESSION_KEY)
+            now_ts = int(timezone.now().timestamp())
+            if isinstance(last_posted_at, int) and now_ts - last_posted_at < INQUIRY_POST_INTERVAL_SECONDS:
+                form.add_error(None, "連続送信を防ぐため、1分ほど待ってから再送してください。")
+            else:
+                form.save()
+                request.session[INQUIRY_LAST_POSTED_AT_SESSION_KEY] = now_ts
+                return redirect("goals:contact_done")
+    else:
+        form = InquiryForm(initial=initial)
+
+    return render(request, "goals/contact.html", {"form": form})
+
+
+def contact_done(request):
+    return render(request, "goals/contact_done.html")
 
 
 @staff_member_required

@@ -3969,6 +3969,33 @@
             font-size: 13px !important;
             font-weight: 500 !important;
         }
+        .site-footer {
+            margin-top: 20px;
+            padding: 14px 0 8px;
+            border-top: 1px solid var(--app-border, #e6e2dc);
+        }
+        .site-footer-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            justify-content: center;
+            font-size: 13px;
+        }
+        .site-footer-links a {
+            color: var(--app-muted, #787774);
+            text-decoration: none;
+        }
+        .site-footer-links a:hover,
+        .site-footer-links a:focus {
+            text-decoration: underline;
+            text-underline-offset: 3px;
+        }
+        @media (max-width: 768px) {
+            .site-footer {
+                margin-top: 12px;
+                padding-bottom: calc(76px + env(safe-area-inset-bottom));
+            }
+        }
 </style>
 </head>
 <body>
@@ -3983,6 +4010,15 @@
             </div>
         {% endif %}
         {% block content %}{% endblock %}
+        {% if request.resolver_match and request.resolver_match.url_name != 'login' and request.resolver_match.url_name != 'signup' and request.resolver_match.url_name != 'password_reset' and request.resolver_match.url_name != 'password_reset_done' and request.resolver_match.url_name != 'password_reset_confirm' and request.resolver_match.url_name != 'password_reset_complete' %}
+            <footer class="site-footer" aria-label="フッターリンク">
+                <nav class="site-footer-links">
+                    <a href="{% url 'goals:contact' %}">お問い合わせ</a>
+                    <a href="{% url 'goals:terms' %}">利用規約</a>
+                    <a href="{% url 'goals:privacy_policy' %}">プライバシーポリシー</a>
+                </nav>
+            </footer>
+        {% endif %}
     </main>
     <nav class="mobile-bottom-nav" aria-label="スマホ用メニュー">
         <a class="{% if request.resolver_match.url_name == 'yearly_goal_list' or request.resolver_match.url_name == 'my_list_detail' or request.resolver_match.url_name == 'my_list_add' or request.resolver_match.url_name == 'my_list_edit' or request.resolver_match.url_name == 'my_list_delete' or request.resolver_match.url_name == 'yearly_goal_detail' or request.resolver_match.url_name == 'yearly_goal_add' or request.resolver_match.url_name == 'yearly_goal_edit' %}is-active{% endif %}" href="{% url 'goals:yearly_goal_list' %}">

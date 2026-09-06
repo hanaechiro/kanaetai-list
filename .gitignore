@@ -14,3 +14,8 @@ venv/
 .vscode/
 staticfiles/
 tmp*/
+*_output.txt
+tmp_*
+probe*.txt
+db_*probe*.txt
+argv_check.txt

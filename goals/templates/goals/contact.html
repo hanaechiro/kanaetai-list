@@ -1,0 +1,88 @@
+{% extends "goals/base.html" %}
+
+{% block title %}お問い合わせ - Wishly{% endblock %}
+
+{% block content %}
+<style>
+    .contact-page {
+        max-width: 640px;
+        margin: 0 auto;
+        display: grid;
+        gap: 14px;
+    }
+    .contact-card {
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 12px;
+        background: #fff;
+        padding: 16px;
+    }
+    .contact-card h2 {
+        margin: 0 0 8px;
+        font-size: 22px;
+        color: var(--app-text, #37352f);
+    }
+    .contact-card p {
+        margin: 0;
+        color: var(--app-muted, #787774);
+        font-size: 14px;
+        line-height: 1.7;
+    }
+    .contact-form {
+        display: grid;
+        gap: 12px;
+    }
+    .contact-form input,
+    .contact-form textarea {
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .contact-submit {
+        justify-self: end;
+        min-width: 140px;
+    }
+</style>
+
+<div class="contact-page">
+    <section class="contact-card">
+        <h2>お問い合わせ</h2>
+        <p>ご意見・不具合報告などがあれば、以下のフォームからお送りください。</p>
+    </section>
+
+    <form class="contact-card contact-form" method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+            <div class="form-error-alert" role="alert">
+                {% for error in form.non_field_errors %}
+                    <p>{{ error }}</p>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <div class="form-field{% if form.name.errors %} has-error{% endif %}">
+            {{ form.name.label_tag }}
+            {{ form.name }}
+            {% for error in form.name.errors %}
+                <p class="field-error-bubble">{{ error }}</p>
+            {% endfor %}
+        </div>
+
+        <div class="form-field{% if form.email.errors %} has-error{% endif %}">
+            {{ form.email.label_tag }}
+            {{ form.email }}
+            {% for error in form.email.errors %}
+                <p class="field-error-bubble">{{ error }}</p>
+            {% endfor %}
+        </div>
+
+        <div class="form-field{% if form.message.errors %} has-error{% endif %}">
+            {{ form.message.label_tag }}
+            {{ form.message }}
+            {% for error in form.message.errors %}
+                <p class="field-error-bubble">{{ error }}</p>
+            {% endfor %}
+        </div>
+
+        <button class="button primary-button contact-submit" type="submit">送信する</button>
+    </form>
+</div>
+{% endblock %}

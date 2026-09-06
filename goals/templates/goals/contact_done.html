@@ -1,0 +1,36 @@
+{% extends "goals/base.html" %}
+
+{% block title %}お問い合わせ完了 - Wishly{% endblock %}
+
+{% block content %}
+<style>
+    .contact-done {
+        max-width: 640px;
+        margin: 0 auto;
+        border: 1px solid var(--app-border, #e5e5e5);
+        border-radius: 12px;
+        background: #fff;
+        padding: 22px 16px;
+        display: grid;
+        gap: 10px;
+    }
+    .contact-done h2 {
+        margin: 0;
+        font-size: 22px;
+    }
+    .contact-done p {
+        margin: 0;
+        color: var(--app-muted, #787774);
+        line-height: 1.7;
+    }
+    .contact-done a {
+        justify-self: start;
+    }
+</style>
+
+<section class="contact-done">
+    <h2>送信が完了しました</h2>
+    <p>お問い合わせありがとうございます。内容を確認のうえ、必要に応じて返信いたします。</p>
+    <a class="button secondary-button" href="{% url 'goals:home' %}">ホームへ戻る</a>
+</section>
+{% endblock %}

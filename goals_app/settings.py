@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 import os
+import sys
 from django.core.exceptions import ImproperlyConfigured
 from importlib.util import find_spec
 from pathlib import Path
@@ -190,7 +191,7 @@ DATABASES = {
 
 DATABASE_URL = os.environ.get('DATABASE_URL')
 DATABASE_SSL_REQUIRE = env_database_ssl_require(DEBUG)
-if DATABASE_URL:
+if DATABASE_URL and 'test' not in sys.argv:
     import dj_database_url
 
     DATABASES['default'] = dj_database_url.config(
@@ -198,6 +199,12 @@ if DATABASE_URL:
         conn_max_age=600,
         ssl_require=DATABASE_SSL_REQUIRE,
     )
+
+if 'test' in sys.argv:
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'test_db.sqlite3',
+    }
 
 
 # Password validation

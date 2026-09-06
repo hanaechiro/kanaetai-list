@@ -32,6 +32,7 @@ from .models import (
     GoalLink,
     GoalSetting,
     IdeaMemo,
+    Inquiry,
     ListComment,
     MonthlyGoal,
     Profile,
@@ -356,6 +357,48 @@ class ResendPasswordResetForm(PasswordResetForm):
             )
             # Keep default password reset UX stable and avoid leaking internals.
             return
+
+
+class InquiryForm(forms.ModelForm):
+    URL_PATTERN = re.compile(r"https?://|www\\.", re.IGNORECASE)
+    MAX_URL_COUNT = 5
+
+    class Meta:
+        model = Inquiry
+        fields = ["name", "email", "message"]
+        widgets = {
+            "name": forms.TextInput(attrs={
+                "placeholder": "お名前",
+                "autocomplete": "name",
+            }),
+            "email": forms.EmailInput(attrs={
+                "placeholder": "返信先メールアドレス",
+                "autocomplete": "email",
+            }),
+            "message": forms.Textarea(attrs={
+                "rows": 7,
+                "placeholder": "お問い合わせ内容をご入力ください",
+                "maxlength": 2000,
+            }),
+        }
+
+    def clean_name(self):
+        value = (self.cleaned_data.get("name") or "").strip()
+        if not value:
+            raise forms.ValidationError("名前を入力してください。")
+        return value
+
+    def clean_email(self):
+        return (self.cleaned_data.get("email") or "").strip().lower()
+
+    def clean_message(self):
+        value = (self.cleaned_data.get("message") or "").strip()
+        if not value:
+            raise forms.ValidationError("問い合わせ内容を入力してください。")
+        url_count = len(self.URL_PATTERN.findall(value))
+        if url_count > self.MAX_URL_COUNT:
+            raise forms.ValidationError("URLの記載が多すぎます。内容を確認してください。")
+        return value
 
 
 class SignUpForm(UserCreationForm):
