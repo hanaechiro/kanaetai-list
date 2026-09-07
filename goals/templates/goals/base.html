@@ -3535,12 +3535,14 @@
         }
         .list-detail-title-row {
             display: flex;
-            flex-wrap: wrap;
-            align-items: center;
+            flex-wrap: nowrap;
+            align-items: flex-start;
             gap: 7px;
             min-width: 0;
         }
         .list-detail-title-row .list-title {
+            flex: 1 1 auto;
+            min-width: 0;
             margin: 0;
             color: var(--app-text, #37352f);
             font-family: var(--ui-font-family) !important;
@@ -3549,6 +3551,11 @@
             line-height: 1.35 !important;
             letter-spacing: 0 !important;
             overflow-wrap: anywhere;
+        }
+        .list-detail-title-row .visibility-badge,
+        .list-detail-title-row .status-pill {
+            flex: 0 0 auto;
+            white-space: nowrap;
         }
         .list-detail-description {
             margin: 8px 0 0 !important;
@@ -4010,7 +4017,7 @@
             </div>
         {% endif %}
         {% block content %}{% endblock %}
-        {% if request.resolver_match and request.resolver_match.url_name != 'login' and request.resolver_match.url_name != 'signup' and request.resolver_match.url_name != 'password_reset' and request.resolver_match.url_name != 'password_reset_done' and request.resolver_match.url_name != 'password_reset_confirm' and request.resolver_match.url_name != 'password_reset_complete' %}
+        {% if not request.user.is_authenticated and request.resolver_match and request.resolver_match.url_name != 'login' and request.resolver_match.url_name != 'signup' and request.resolver_match.url_name != 'password_reset' and request.resolver_match.url_name != 'password_reset_done' and request.resolver_match.url_name != 'password_reset_confirm' and request.resolver_match.url_name != 'password_reset_complete' %}
             <footer class="site-footer" aria-label="フッターリンク">
                 <nav class="site-footer-links">
                     <a href="{% url 'goals:contact' %}">お問い合わせ</a>

@@ -1763,9 +1763,11 @@ class CollaborativeMemberUiAndLeaveFlowTests(TestCase):
         self.client.force_login(self.owner)
         owner_profile = self.client.get(reverse("goals:my_profile"))
         self.assertEqual(owner_profile.status_code, 200)
+        self.assertContains(owner_profile, "profile-list-badges")
         self.assertContains(owner_profile, "非公開共同リストA")
         self.assertContains(owner_profile, "非公開")
         self.assertContains(owner_profile, "共同リスト")
+        self.assertRegex(owner_profile.content.decode(), r"profile-list-badges[\s\S]*?非公開[\s\S]*?共同リスト")
 
         self.client.force_login(self.member)
         member_profile = self.client.get(reverse("goals:my_profile"))
@@ -2639,6 +2641,17 @@ class ContactAndLegalPagesTests(TestCase):
         )
         self.assertRedirects(response, reverse("goals:contact_done"), fetch_redirect_response=False)
         self.assertTrue(Inquiry.objects.filter(name="ログインユーザー").exists())
+
+    def test_authenticated_app_pages_hide_common_footer_links(self):
+        self.client.force_login(self.user)
+
+        for url_name in ["goals:my_profile", "goals:public_goal_list", "goals:yearly_goal_list"]:
+            with self.subTest(url_name=url_name):
+                response = self.client.get(reverse(url_name))
+                self.assertEqual(response.status_code, 200)
+                self.assertNotContains(response, reverse("goals:contact"))
+                self.assertNotContains(response, reverse("goals:terms"))
+                self.assertNotContains(response, reverse("goals:privacy_policy"))
 
     def test_contact_post_without_csrf_is_rejected(self):
         csrf_client = Client(enforce_csrf_checks=True)
