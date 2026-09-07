@@ -1,0 +1,75 @@
+{% extends "goals/base.html" %}
+
+{% block title %}一時的なエラー - Wishly{% endblock %}
+
+{% block content %}
+<style>
+    .status-page {
+        max-width: 640px;
+        margin: 32px auto 0;
+        padding: 0 14px 32px;
+    }
+    .status-card {
+        background: #ffffff;
+        border: 1px solid #e6dece;
+        border-radius: 16px;
+        padding: 28px 20px;
+        text-align: center;
+        box-shadow: 0 10px 28px rgba(73, 59, 41, 0.05);
+    }
+    .status-mark {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 88px;
+        height: 88px;
+        border-radius: 50%;
+        background: #f5efe8;
+        color: #7f6849;
+        font-size: 28px;
+        font-weight: 700;
+        margin-bottom: 18px;
+    }
+    .status-card h1 {
+        margin: 0 0 10px;
+        font-size: clamp(1.8rem, 4vw, 2.4rem);
+        color: #37352f;
+    }
+    .status-card p {
+        margin: 0 auto 18px;
+        max-width: 420px;
+        color: #5f574f;
+        line-height: 1.7;
+        font-size: 1rem;
+    }
+    .status-actions {
+        display: flex;
+        justify-content: center;
+        margin-top: 8px;
+    }
+    .status-actions .button {
+        min-width: 190px;
+    }
+    @media (max-width: 480px) {
+        .status-card {
+            padding: 22px 16px;
+        }
+        .status-mark {
+            width: 72px;
+            height: 72px;
+            font-size: 24px;
+        }
+    }
+</style>
+
+<div class="status-page">
+    <div class="status-card">
+        <div class="status-mark">500</div>
+        <h1>一時的なエラーが発生しました</h1>
+        <p>少し時間をおいてから、もう一度お試しください。<br>問題が続く場合は、トップページから再度アクセスしてください。</p>
+        <div class="status-actions">
+            <a class="button primary-button" href="/">トップページへ戻る</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

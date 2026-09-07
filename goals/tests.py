@@ -20,6 +20,7 @@ from django.db import IntegrityError, transaction
 from django.test import Client, RequestFactory, TestCase
 from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
@@ -63,6 +64,45 @@ TEST_STORAGES = {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
     },
 }
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class ErrorPageTests(TestCase):
+    @override_settings(DEBUG=False)
+    def test_missing_page_uses_custom_404_template(self):
+        response = self.client.get("/missing-page/")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTemplateUsed(response, "404.html")
+        self.assertContains(response, "ページが見つかりません", status_code=404)
+        self.assertNotContains(response, "Traceback", status_code=404)
+        self.assertNotContains(response, "DEBUG", status_code=404)
+        self.assertNotContains(response, "Local vars", status_code=404)
+
+    @override_settings(DEBUG=False)
+    def test_permission_denied_uses_custom_403_template(self):
+        User = get_user_model()
+        owner = User.objects.create_user(username="owner", email="owner@example.com", password="password12345")
+        viewer = User.objects.create_user(username="viewer", email="viewer@example.com", password="password12345")
+        private_list = YearPlan.objects.create(user=owner, year=2026, list_title="Private list", is_public=False)
+
+        self.client.force_login(viewer)
+        response = self.client.get(reverse("goals:my_list_detail", args=[private_list.pk]))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTemplateUsed(response, "403.html")
+        self.assertContains(response, "このページを表示する権限がありません", status_code=403)
+        self.assertNotContains(response, "forbidden", status_code=403)
+
+    @override_settings(DEBUG=False)
+    def test_server_error_uses_custom_500_template(self):
+        rendered = render_to_string("500.html")
+
+        self.assertIn("一時的なエラーが発生しました", rendered)
+        self.assertNotIn("Traceback", rendered)
+        self.assertNotIn("DATABASE_URL", rendered)
+        self.assertNotIn("SECRET_KEY", rendered)
+        self.assertNotIn("API_KEY", rendered)
 
 
 @override_settings(STORAGES=TEST_STORAGES)
