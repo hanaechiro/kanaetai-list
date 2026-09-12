@@ -393,6 +393,16 @@ class UsernameUniquenessTests(TestCase):
         self.assertRedirects(response, reverse("goals:my_profile"), fetch_redirect_response=False)
         self.assertTrue(self.User.objects.filter(username="mika").exists())
 
+    def test_signup_success_message_is_visible_after_redirect(self):
+        response = self.client.post(
+            reverse("goals:signup"),
+            self.signup_payload("mika", "mika@example.com"),
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse("goals:my_profile"), fetch_redirect_response=True)
+        self.assertContains(response, "新規登録しました。")
+
     def test_signup_integrity_error_returns_form_error(self):
         with patch("goals.views.SignUpForm.save", side_effect=IntegrityError):
             response = self.client.post(reverse("goals:signup"), self.signup_payload("mika", "mika@example.com"))

@@ -29,9 +29,14 @@
             --app-radius: 12px;
             --app-radius-sm: 8px;
             --app-shadow: 0 1px 2px rgba(15, 15, 15, 0.04);
+            --app-vh: 100vh;
+        }
+        html {
+            height: 100%;
         }
         body {
             margin: 0;
+            min-height: var(--app-vh);
             color: #242424;
             background: #f7f4ef;
             font-family: var(--ui-font-family);
@@ -1106,14 +1111,30 @@
             margin-bottom: 16px;
         }
         .messages {
+            display: grid;
+            gap: 8px;
             margin-bottom: 16px;
         }
         .messages p {
-            background: #eef8ee;
-            border: 1px solid #cde8cd;
-            border-radius: 6px;
-            margin: 0 0 8px;
+            margin: 0;
+            border-radius: 8px;
             padding: 10px 12px;
+            font-size: 14px;
+            line-height: 1.5;
+            border: 1px solid #d9e7d3;
+            background: #edf9ef;
+            color: #295934;
+        }
+        .messages p.message-info {
+            border-color: #dfe3ef;
+            background: #eef4ff;
+            color: #2f4a78;
+        }
+        .messages p.message-error,
+        .messages p.message-warning {
+            border-color: #f0c9c3;
+            background: #fff5f3;
+            color: #8a332b;
         }
         label {
             display: block;
@@ -4008,11 +4029,9 @@
 <body>
     <main>
         {% if messages %}
-            <div class="messages">
+            <div class="messages" aria-live="polite">
                 {% for message in messages %}
-                    {% if "error" in message.tags or "warning" in message.tags %}
-                        <p>{{ message }}</p>
-                    {% endif %}
+                    <p class="{% if 'error' in message.tags or 'warning' in message.tags %}message-error{% elif 'success' in message.tags %}message-success{% else %}message-info{% endif %}">{{ message }}</p>
                 {% endfor %}
             </div>
         {% endif %}
@@ -4109,6 +4128,18 @@
                 return value.startsWith(prefix) ? decodeURIComponent(value.slice(prefix.length)) : "";
             }, "");
         }
+
+        function updateVisualViewportHeight() {
+            const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+            document.documentElement.style.setProperty("--app-vh", `${viewportHeight}px`);
+        }
+
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener("resize", updateVisualViewportHeight);
+            window.visualViewport.addEventListener("scroll", updateVisualViewportHeight);
+        }
+        window.addEventListener("resize", updateVisualViewportHeight);
+        updateVisualViewportHeight();
 
         async function recordWishlyListShare(button) {
             const countUrl = button.dataset.shareCountUrl;
