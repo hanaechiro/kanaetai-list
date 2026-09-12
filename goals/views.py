@@ -9,7 +9,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError
-from django.http import HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.db.models import Count, F, Max, Q, Sum
 from django.db.models.query import prefetch_related_objects
 from django.core.paginator import Paginator
@@ -907,9 +907,23 @@ def can_leave_year_plan(user, plan):
     return user.is_authenticated and plan.user_id != user.id and plan.collaborators.filter(pk=user.pk).exists()
 
 
+def is_operational_user(user):
+    return bool(getattr(user, "is_staff", False) or getattr(user, "is_superuser", False))
+
+
+def public_user_filter(prefix=""):
+    return Q(**{f"{prefix}is_staff": False, f"{prefix}is_superuser": False})
+
+
+def public_user_queryset():
+    return get_user_model().objects.filter(is_staff=False, is_superuser=False)
+
+
 def can_view_account_details(viewer, owner):
     if viewer.is_authenticated and viewer.pk == owner.pk:
         return True
+    if is_operational_user(owner):
+        return False
     profile = getattr(owner, "profile", None)
     if not profile or not profile.is_private:
         return True
@@ -941,6 +955,8 @@ def pending_invitees_for_plan(plan):
     rows = []
     for invite in invites:
         invitee = invite.invitee
+        if is_operational_user(invitee):
+            continue
         try:
             profile = invitee.profile
         except Exception:
@@ -973,14 +989,15 @@ def visible_public_plan_filter(viewer, prefix=""):
     profile_private_field = f"{prefix}user__profile__is_private"
     profile_missing_field = f"{prefix}user__profile__isnull"
     user_id_field = f"{prefix}user_id"
+    public_owner_filter = public_user_filter(prefix=f"{prefix}user__")
     if viewer.is_authenticated:
         visible_user_ids = Follow.objects.filter(follower=viewer).values_list("following_id", flat=True)
-        return (
+        return public_owner_filter & (
             Q(**{profile_private_field: False})
             | Q(**{user_field: viewer})
             | Q(**{f"{user_id_field}__in": visible_user_ids})
         )
-    return Q(**{profile_private_field: False}) | Q(**{profile_missing_field: True})
+    return public_owner_filter & (Q(**{profile_private_field: False}) | Q(**{profile_missing_field: True}))
 
 
 def visible_public_goal_filter(viewer):
@@ -1001,7 +1018,7 @@ def build_user_row(user, request_user):
 
 
 def build_user_rows(users, request_user):
-    users = list(users)
+    users = [user for user in users if not is_operational_user(user)]
     if not users:
         return []
 
@@ -1125,8 +1142,8 @@ def profile_stats(user, viewer=None):
         "done_item_count": goals.filter(is_done=True).count(),
         "liked_count": LikeList.objects.filter(my_list__user=user).count(),
         "saved_count": SavedList.objects.filter(my_list__user=user).count(),
-        "following_count": Follow.objects.filter(follower=user).count(),
-        "followers_count": Follow.objects.filter(following=user).count(),
+        "following_count": Follow.objects.filter(follower=user, following__is_staff=False, following__is_superuser=False).count(),
+        "followers_count": Follow.objects.filter(following=user, follower__is_staff=False, follower__is_superuser=False).count(),
     }
 
 
@@ -1155,7 +1172,11 @@ def home(request):
         for plan in my_lists:
             plan.progress_percent = progress_percent(plan.goals_done_count, plan.target_count)
 
-        following_ids = Follow.objects.filter(follower=request.user).values_list("following_id", flat=True)
+        following_ids = Follow.objects.filter(
+            follower=request.user,
+            following__is_staff=False,
+            following__is_superuser=False,
+        ).values_list("following_id", flat=True)
         following_plans = YearPlan.objects.filter(
             user_id__in=following_ids,
             is_public=True,
@@ -1167,6 +1188,8 @@ def home(request):
         saved_plans = YearPlan.objects.filter(
             saved_by__user=request.user,
             is_public=True,
+            user__is_staff=False,
+            user__is_superuser=False,
         ).select_related("user", "user__profile").annotate(
             public_goal_count=Count("goals", filter=Q(goals__item_is_public=True)),
             saved_at=Max("saved_by__created_at"),
@@ -1231,7 +1254,7 @@ def contact_done(request):
 def staff_dashboard(request):
     today = timezone.localdate()
     metrics = [
-        {"label": "総ユーザー数", "value": get_user_model().objects.count()},
+        {"label": "総ユーザー数", "value": public_user_queryset().count()},
         {"label": "総リスト数", "value": YearPlan.objects.count()},
         {"label": "総項目数", "value": YearlyGoal.objects.count()},
     ]
@@ -1244,7 +1267,7 @@ def staff_dashboard(request):
 def management_chart_rows(start_date, end_date):
     rows_by_date = {
         row["date_joined__date"]: row["count"]
-        for row in get_user_model().objects.filter(date_joined__date__gte=start_date, date_joined__date__lte=end_date)
+        for row in public_user_queryset().filter(date_joined__date__gte=start_date, date_joined__date__lte=end_date)
         .values("date_joined__date").annotate(count=Count("id"))
     }
     dates = []
@@ -1298,7 +1321,7 @@ def management_period_start_date(queryset, date_field, period, today):
 @staff_member_required
 def management_dashboard(request):
     today = timezone.localdate()
-    users = get_user_model().objects.all()
+    users = public_user_queryset()
     period = request.GET.get("period", "30")
     user_start_date = management_period_start_date(users, "date_joined", period, today)
     list_start_date = management_period_start_date(YearPlan.objects.all(), "created_at", period, today)
@@ -1935,6 +1958,8 @@ def cancel_year_plan_invite(request, pk, invite_pk):
 
 def profile_detail(request, username):
     user = get_object_or_404(get_user_model(), username=username)
+    if is_operational_user(user) and not (request.user.is_authenticated and request.user.pk == user.pk):
+        raise Http404
     profile, _ = Profile.objects.get_or_create(user=user, defaults={"display_name": user.username})
     if request.user.is_authenticated and request.user == user:
         return redirect("goals:my_profile")
@@ -1968,7 +1993,11 @@ def yearly_goal_list(request):
     if timeline_filter not in {"all", "achievement", "share"}:
         timeline_filter = "all"
 
-    following_ids = Follow.objects.filter(follower=request.user).values_list("following_id", flat=True)
+    following_ids = Follow.objects.filter(
+        follower=request.user,
+        following__is_staff=False,
+        following__is_superuser=False,
+    ).values_list("following_id", flat=True)
     timeline_plans = YearPlan.objects.filter(
         user_id__in=following_ids,
         is_public=True,
@@ -2074,7 +2103,7 @@ def my_list_detail(request, pk):
         "done_count": done_count,
         "total_count": total_count,
         "remaining_count": max(year_plan.target_count - total_count, 0),
-        "member_count": 1 + year_plan.collaborators.count(),
+        "member_count": 1 + year_plan.collaborators.filter(is_staff=False, is_superuser=False).count(),
         "current_page": current_page,
         "total_pages": total_pages,
         "previous_page": current_page - 1 if current_page > 1 else None,
@@ -2366,6 +2395,8 @@ def build_public_list_groups(plans, request_user=None, category="", request=None
 
         collaborators_display = []
         for c in plan.collaborators.all():
+            if is_operational_user(c):
+                continue
             try:
                 c_profile = c.profile
             except Exception:
@@ -2381,6 +2412,7 @@ def build_public_list_groups(plans, request_user=None, category="", request=None
             "display_name": display_name,
             "detail_url_name": detail_url_name,
             "collaborators_display": collaborators_display,
+            "member_count": 1 + sum(1 for c in plan.collaborators.all() if not is_operational_user(c)),
             "list_title": plan.list_title or f"{plan.year}年やりたいこと",
             "target_count": plan.target_count,
             "done_count": done_count,
@@ -2508,7 +2540,7 @@ def public_goal_list(request):
     page_query = urlencode(query_params)
     grouped_goals = build_public_list_groups(page_obj.object_list, request.user, request=request)
 
-    users_qs = get_user_model().objects.exclude(pk=getattr(request.user, "pk", None)).select_related("profile").annotate(
+    users_qs = public_user_queryset().exclude(pk=getattr(request.user, "pk", None)).select_related("profile").annotate(
         followers_count=Count("follower_relations"),
     )
     if query:
@@ -2517,7 +2549,7 @@ def public_goal_list(request):
     user_paginator = Paginator(users_qs, 10)
     user_page_obj = user_paginator.get_page(request.GET.get("page"))
     user_results = build_user_rows(user_page_obj.object_list, request.user)
-    recommended_user_qs = get_user_model().objects.exclude(pk=getattr(request.user, "pk", None)).select_related("profile").annotate(
+    recommended_user_qs = public_user_queryset().exclude(pk=getattr(request.user, "pk", None)).select_related("profile").annotate(
         followers_count=Count("follower_relations"),
     ).order_by("-followers_count", "username")[:6]
     recommended_users = build_user_rows(recommended_user_qs, request.user)
@@ -2652,7 +2684,11 @@ def saved_item_page(request):
 def following_list_page(request):
     if not request.user.is_authenticated:
         return redirect("login")
-    following_ids = Follow.objects.filter(follower=request.user).values_list("following_id", flat=True)
+    following_ids = Follow.objects.filter(
+        follower=request.user,
+        following__is_staff=False,
+        following__is_superuser=False,
+    ).values_list("following_id", flat=True)
     public_plans = YearPlan.objects.filter(
         user_id__in=following_ids,
         is_public=True,
@@ -2671,7 +2707,7 @@ def following_list_page(request):
 
 @login_required
 def following_users_page(request):
-    following = get_user_model().objects.filter(
+    following = public_user_queryset().filter(
         follower_relations__follower=request.user,
     ).select_related("profile").order_by("username")
     user_rows = build_user_rows(following, request.user)
@@ -2684,7 +2720,7 @@ def following_users_page(request):
 
 @login_required
 def followers_page(request):
-    followers = get_user_model().objects.filter(
+    followers = public_user_queryset().filter(
         following_relations__following=request.user,
     ).select_related("profile").order_by("username")
     user_rows = build_user_rows(followers, request.user)
@@ -2698,7 +2734,7 @@ def followers_page(request):
 @require_POST
 @login_required
 def toggle_follow(request, username):
-    target = get_object_or_404(get_user_model(), username=username)
+    target = get_object_or_404(public_user_queryset(), username=username)
     if target == request.user:
         messages.info(request, "自分自身はフォローできません。")
     else:
@@ -3234,7 +3270,7 @@ class YearPlanCreateView(LoginRequiredMixin, UserFormKwargsMixin, CreateView):
         # Provide minimal all-user data for client-side searching when user types.
         # Do not assume Profile exists for every user.
         users = (
-            get_user_model().objects.exclude(pk=self.request.user.pk)
+            public_user_queryset().exclude(pk=self.request.user.pk)
             .order_by("username")
         )
         all_data = []
@@ -3333,7 +3369,7 @@ class YearPlanUpdateView(LoginRequiredMixin, UserFormKwargsMixin, UpdateView):
             pending_qs.filter(invitee_id__in=stale_pending_ids).delete()
 
         invite_target_ids = selected_ids - accepted_ids
-        invite_targets = get_user_model().objects.filter(pk__in=invite_target_ids)
+        invite_targets = public_user_queryset().filter(pk__in=invite_target_ids)
         for u in invite_targets:
             if u.pk == self.request.user.pk:
                 continue

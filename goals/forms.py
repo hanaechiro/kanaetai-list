@@ -267,7 +267,11 @@ class YearPlanForm(forms.ModelForm):
             allowed_ids.update(pending_ids)
 
         self.fields["collaborators"].queryset = (
-            get_user_model().objects.filter(Q(pk__in=following_ids) | Q(pk__in=allowed_ids)).exclude(pk=user.pk)
+            get_user_model().objects.filter(
+                Q(pk__in=following_ids) | Q(pk__in=allowed_ids),
+                is_staff=False,
+                is_superuser=False,
+            ).exclude(pk=user.pk)
             .distinct()
             .order_by("username")
         )

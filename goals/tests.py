@@ -835,6 +835,23 @@ class DiscoverUserSearchTests(TestCase):
         self.user_private.profile.display_name = "PrivateUser"
         self.user_private.profile.is_private = True
         self.user_private.profile.save(update_fields=["display_name", "is_private"])
+        self.staff_user = User.objects.create_user(
+            username="staff_only",
+            email="staff@example.com",
+            password="password12345",
+            is_staff=True,
+        )
+        self.staff_user.profile.display_name = "StaffOnly"
+        self.staff_user.profile.is_private = False
+        self.staff_user.profile.save(update_fields=["display_name", "is_private"])
+        self.super_user = User.objects.create_superuser(
+            username="super_only",
+            email="super@example.com",
+            password="password12345",
+        )
+        self.super_user.profile.display_name = "SuperOnly"
+        self.super_user.profile.is_private = False
+        self.super_user.profile.save(update_fields=["display_name", "is_private"])
 
     def get_usernames_from_response(self, resp):
         return [row['user'].username for row in resp.context.get('user_results', [])]
@@ -873,6 +890,40 @@ class DiscoverUserSearchTests(TestCase):
         names = self.get_usernames_from_response(resp)
         # Non-public accounts should now appear in search results
         self.assertIn('private1', names)
+
+    def test_staff_and_superuser_are_not_in_user_search_results(self):
+        staff_resp = self.client.get(reverse("goals:public_goal_list"), {"q": "StaffOnly"})
+        super_resp = self.client.get(reverse("goals:public_goal_list"), {"q": "SuperOnly"})
+
+        self.assertEqual(staff_resp.status_code, 200)
+        self.assertEqual(super_resp.status_code, 200)
+        self.assertNotIn("staff_only", self.get_usernames_from_response(staff_resp))
+        self.assertNotIn("super_only", self.get_usernames_from_response(super_resp))
+
+    def test_staff_and_superuser_are_not_recommended_users(self):
+        resp = self.client.get(reverse("goals:public_goal_list"))
+
+        self.assertEqual(resp.status_code, 200)
+        recommended_names = [row["user"].username for row in resp.context["recommended_users"]]
+        self.assertIn("yuki_25", recommended_names)
+        self.assertNotIn("staff_only", recommended_names)
+        self.assertNotIn("super_only", recommended_names)
+
+    def test_operational_user_profile_is_not_public(self):
+        staff_resp = self.client.get(reverse("goals:profile_detail", args=[self.staff_user.username]))
+        super_resp = self.client.get(reverse("goals:profile_detail", args=[self.super_user.username]))
+
+        self.assertEqual(staff_resp.status_code, 404)
+        self.assertEqual(super_resp.status_code, 404)
+
+    def test_staff_user_cannot_be_followed_from_public_flow(self):
+        follower = get_user_model().objects.create_user(username="follower2", email="f2@example.com", password="pw")
+        self.client.force_login(follower)
+
+        response = self.client.post(reverse("goals:toggle_follow", args=[self.staff_user.username]))
+
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Follow.objects.filter(follower=follower, following=self.staff_user).exists())
 
     def test_private_profile_protected_and_follow_request(self):
         # Anonymous viewer should not be able to view private profile details
@@ -1020,9 +1071,13 @@ class CollaboratorSearchTests(TestCase):
         self.private = User.objects.create_user(username="privateuser", email="p@example.com", password="pw")
         self.private.profile.is_private = True
         self.private.profile.save(update_fields=["is_private"])
+        self.staff = User.objects.create_user(username="staffinvite", email="staffinvite@example.com", password="pw", is_staff=True)
+        self.superuser = User.objects.create_superuser(username="superinvite", email="superinvite@example.com", password="pw")
         # current follows chiroro
         from .models import Follow
         Follow.objects.create(follower=self.current, following=self.chiroro)
+        Follow.objects.create(follower=self.current, following=self.staff)
+        Follow.objects.create(follower=self.current, following=self.superuser)
 
     def test_collaborator_options_include_users_and_exclude_self(self):
         self.client.force_login(self.current)
@@ -1033,6 +1088,8 @@ class CollaboratorSearchTests(TestCase):
         self.assertIn('data-username="chiroro"', content)
         # display name should be present
         self.assertIn('ちろろ', content)
+        self.assertNotIn('data-username="staffinvite"', content)
+        self.assertNotIn('data-username="superinvite"', content)
         # private user is not followed; initial select should NOT contain their data-username
         self.assertNotIn('data-username="privateuser"', content)
         # current user should not be present
@@ -1055,6 +1112,8 @@ class CollaboratorSearchTests(TestCase):
         usernames = [u.get("username", "") for u in all_users]
         self.assertIn("privateuser", usernames)
         self.assertIn("chiroro", usernames)
+        self.assertNotIn("staffinvite", usernames)
+        self.assertNotIn("superinvite", usernames)
 
         # Client-side search normalizes input and candidate text to lowercase.
         def matches(query):
@@ -2238,6 +2297,12 @@ class ManagementAdminFeatureTests(TestCase):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 200)
 
+    def test_staff_can_access_django_admin_index(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
+
     def test_non_staff_cannot_access_management_pages(self):
         self.client.force_login(self.normal_user)
         for url in self._management_pages():
@@ -2281,10 +2346,10 @@ class ManagementAdminFeatureTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         kpi_map = {item["label"]: item["value"] for item in response.context["kpis"]}
-        self.assertEqual(kpi_map["総ユーザー数"], get_user_model().objects.count())
-        self.assertEqual(kpi_map["今日の新規登録数"], get_user_model().objects.filter(date_joined__date=timezone.localdate()).count())
-        self.assertEqual(kpi_map["過去7日の新規登録数"], get_user_model().objects.filter(date_joined__date__gte=timezone.localdate() - timedelta(days=6)).count())
-        self.assertEqual(kpi_map["過去30日の新規登録数"], get_user_model().objects.filter(date_joined__date__gte=timezone.localdate() - timedelta(days=29)).count())
+        self.assertEqual(kpi_map["総ユーザー数"], get_user_model().objects.filter(is_staff=False, is_superuser=False).count())
+        self.assertEqual(kpi_map["今日の新規登録数"], get_user_model().objects.filter(is_staff=False, is_superuser=False, date_joined__date=timezone.localdate()).count())
+        self.assertEqual(kpi_map["過去7日の新規登録数"], get_user_model().objects.filter(is_staff=False, is_superuser=False, date_joined__date__gte=timezone.localdate() - timedelta(days=6)).count())
+        self.assertEqual(kpi_map["過去30日の新規登録数"], get_user_model().objects.filter(is_staff=False, is_superuser=False, date_joined__date__gte=timezone.localdate() - timedelta(days=29)).count())
         self.assertEqual(kpi_map["総リスト数"], YearPlan.objects.count())
         self.assertEqual(kpi_map["総項目数"], YearlyGoal.objects.count())
         self.assertEqual(kpi_map["達成済み項目数"], YearlyGoal.objects.filter(is_done=True).count())
@@ -2308,7 +2373,7 @@ class ManagementAdminFeatureTests(TestCase):
         all_response = self.client.get(reverse("goals:management_dashboard"), {"period": "all"})
         self.assertEqual(all_response.status_code, 200)
         self.assertEqual(all_response.context["period"], "all")
-        earliest = get_user_model().objects.order_by("date_joined").first().date_joined.date()
+        earliest = get_user_model().objects.filter(is_staff=False, is_superuser=False).order_by("date_joined").first().date_joined.date()
         expected_days = (timezone.localdate() - earliest).days + 1
         self.assertEqual(len(all_response.context["user_chart"]["rows"]), expected_days)
         self.assertContains(all_response, all_response.context["user_chart"]["points"])
