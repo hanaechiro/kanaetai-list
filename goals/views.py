@@ -1090,10 +1090,23 @@ def delete_media_file_if_unreferenced(name, storage, *, profile_pk=None, goal_im
         pass
 
 
-def progress_percent(done_count, total_count):
-    if total_count <= 0:
+def progress_percent(done_count, target_count):
+    if target_count <= 0:
         return 0
-    return min(round(done_count / total_count * 100), 100)
+    return min(round(done_count / target_count * 100), 100)
+
+
+def find_recent_duplicate_yearly_goal(year_plan, user, form, *, seconds=10):
+    threshold = timezone.now() - timedelta(seconds=seconds)
+    return YearlyGoal.objects.filter(
+        year_plan=year_plan,
+        added_by=user,
+        title=form.cleaned_data.get("title", ""),
+        category=form.cleaned_data.get("category", "other"),
+        description=form.cleaned_data.get("description", ""),
+        item_is_public=form.cleaned_data.get("item_is_public", True),
+        created_at__gte=threshold,
+    ).order_by("-created_at").first()
 
 
 def profile_stats(user, viewer=None):
@@ -1140,7 +1153,7 @@ def home(request):
             goals_done_count=Count("goals", filter=Q(goals__is_done=True)),
         ).order_by("-updated_at", "-pk")[:3]
         for plan in my_lists:
-            plan.progress_percent = progress_percent(plan.goals_done_count, plan.goals_count)
+            plan.progress_percent = progress_percent(plan.goals_done_count, plan.target_count)
 
         following_ids = Follow.objects.filter(follower=request.user).values_list("following_id", flat=True)
         following_plans = YearPlan.objects.filter(
@@ -1528,7 +1541,7 @@ def my_profile(request):
     ).order_by("-updated_at", "-pk")
     my_plans = list(my_plans)
     for plan in my_plans:
-        plan.progress_percent = progress_percent(plan.goals_done_count, plan.goals_count)
+        plan.progress_percent = progress_percent(plan.goals_done_count, plan.target_count)
         # A list is complete when its completed item count reaches the configured target count.
         plan.is_target_completed = plan.target_count > 0 and plan.goals_done_count >= plan.target_count
 
@@ -2040,7 +2053,7 @@ def my_list_detail(request, pk):
     goals = all_goals
     done_count = all_goals.filter(is_done=True).count()
     total_count = all_goals.count()
-    year_plan.progress_percent = progress_percent(done_count, total_count)
+    year_plan.progress_percent = progress_percent(done_count, year_plan.target_count)
     total_pages = max(ceil(total_count / 20), 1)
     try:
         current_page = int(request.GET.get("page", "1"))
@@ -2126,6 +2139,22 @@ def add_my_list_goal_inline(request, pk):
         messages.error(request, item_limit_message())
         return redirect("goals:my_list_detail", pk=year_plan.pk)
     if form.is_valid():
+        duplicate_goal = find_recent_duplicate_yearly_goal(year_plan, request.user, form)
+        if duplicate_goal:
+            if is_ajax:
+                html = render_to_string(
+                    "goals/partials/yearly_notebook_goal.html",
+                    {"goal": duplicate_goal, "setting": year_plan},
+                    request=request,
+                )
+                return JsonResponse({
+                    "ok": True,
+                    "html": html,
+                    "goal_id": duplicate_goal.pk,
+                    "category": duplicate_goal.category,
+                    "total_count": year_plan.goals.count(),
+                })
+            return redirect("goals:my_list_detail", pk=year_plan.pk)
         goal = form.save(commit=False)
         goal.user = year_plan.user
         goal.year_plan = year_plan
@@ -2420,8 +2449,8 @@ def build_public_list_groups(plans, request_user=None, category="", request=None
                 })
 
     for group in grouped_goals:
-        group["progress_percent"] = progress_percent(group["done_count"], group["total_count"])
-        group["target_progress_percent"] = progress_percent(group["done_count"], group["total_count"])
+        group["progress_percent"] = progress_percent(group["done_count"], group["target_count"])
+        group["target_progress_percent"] = progress_percent(group["done_count"], group["target_count"])
         category_labels = []
         seen_categories = set()
         for goal in group["goals"]:
@@ -3098,6 +3127,10 @@ class YearlyGoalCreateView(LoginRequiredMixin, CreateView):
         if year_plan_item_limit_reached(year_plan):
             form.add_error(None, item_limit_message())
             return self.form_invalid(form)
+        duplicate_goal = find_recent_duplicate_yearly_goal(year_plan, self.request.user, form)
+        if duplicate_goal:
+            self.object = duplicate_goal
+            return redirect(self.get_success_url())
         form.instance.user = year_plan.user
         form.instance.year_plan = year_plan
         form.instance.added_by = self.request.user

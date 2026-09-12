@@ -283,7 +283,7 @@
 
 {% include "goals/partials/app_form_header.html" with header_title=title back_url=cancel_url back_label=form_back_label cancel_url=cancel_url save_form_id="main-form" %}
 
-<form id="main-form" class="form-box" method="post" enctype="multipart/form-data" novalidate {% if disable_autocomplete %}autocomplete="off" autocapitalize="off" spellcheck="false"{% endif %}>
+<form id="main-form" class="form-box" method="post" enctype="multipart/form-data" novalidate data-disable-on-submit {% if disable_autocomplete %}autocomplete="off" autocapitalize="off" spellcheck="false"{% endif %}>
     {% csrf_token %}
     {% if form.errors %}
         <div class="form-error-alert" role="alert">
@@ -597,5 +597,23 @@
         searchInput.addEventListener("input", renderResults);
         render();
     }
+
+    document.querySelectorAll("form[data-disable-on-submit]").forEach((form) => {
+        form.addEventListener("submit", (event) => {
+            if (form.dataset.submitting === "true") {
+                event.preventDefault();
+                return;
+            }
+            form.dataset.submitting = "true";
+
+            const submitButtons = Array.from(form.querySelectorAll('button[type="submit"]'));
+            if (form.id) {
+                submitButtons.push(...document.querySelectorAll(`button[type="submit"][form="${form.id}"]`));
+            }
+            submitButtons.forEach((button) => {
+                button.disabled = true;
+            });
+        });
+    });
 </script>
 {% endblock %}

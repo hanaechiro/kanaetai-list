@@ -912,6 +912,84 @@ class YearlyGoalNoteTests(TestCase):
         self.assertEqual(detail_resp.status_code, 200)
         self.assertContains(detail_resp, '宮古島のきれいな海でシュノーケリングをしたい！')
 
+    def test_one_add_post_creates_one_goal(self):
+        url = reverse("goals:add_my_list_goal_inline", args=[self.year_plan.pk])
+        response = self.client.post(url, {"title": "single add", "category": "travel", "item_is_public": "on"})
+
+        self.assertRedirects(response, reverse("goals:my_list_detail", args=[self.year_plan.pk]), fetch_redirect_response=False)
+        self.assertEqual(YearlyGoal.objects.filter(year_plan=self.year_plan, title="single add").count(), 1)
+
+    def test_duplicate_add_post_reuses_recent_goal(self):
+        url = reverse("goals:add_my_list_goal_inline", args=[self.year_plan.pk])
+        data = {"title": "duplicate add", "category": "travel", "description": "same memo", "item_is_public": "on"}
+
+        first_response = self.client.post(url, data)
+        second_response = self.client.post(url, data)
+
+        self.assertRedirects(first_response, reverse("goals:my_list_detail", args=[self.year_plan.pk]), fetch_redirect_response=False)
+        self.assertRedirects(second_response, reverse("goals:my_list_detail", args=[self.year_plan.pk]), fetch_redirect_response=False)
+        self.assertEqual(YearlyGoal.objects.filter(year_plan=self.year_plan, title="duplicate add").count(), 1)
+
+    def test_same_title_can_be_added_after_duplicate_guard_window(self):
+        old_goal = YearlyGoal.objects.create(
+            user=self.user,
+            year_plan=self.year_plan,
+            title="repeat later",
+            category="travel",
+            description="same memo",
+            item_is_public=True,
+            added_by=self.user,
+        )
+        YearlyGoal.objects.filter(pk=old_goal.pk).update(created_at=timezone.now() - timedelta(seconds=11))
+
+        response = self.client.post(
+            reverse("goals:add_my_list_goal_inline", args=[self.year_plan.pk]),
+            {"title": "repeat later", "category": "travel", "description": "same memo", "item_is_public": "on"},
+        )
+
+        self.assertRedirects(response, reverse("goals:my_list_detail", args=[self.year_plan.pk]), fetch_redirect_response=False)
+        self.assertEqual(YearlyGoal.objects.filter(year_plan=self.year_plan, title="repeat later").count(), 2)
+
+    def test_same_title_in_different_lists_is_not_treated_as_duplicate(self):
+        other_plan = YearPlan.objects.create(user=self.user, year=2026, list_title="Other Plan", target_count=10)
+        data = {"title": "shared title", "category": "travel", "description": "same memo", "item_is_public": "on"}
+
+        self.client.post(reverse("goals:add_my_list_goal_inline", args=[self.year_plan.pk]), data)
+        self.client.post(reverse("goals:add_my_list_goal_inline", args=[other_plan.pk]), data)
+
+        self.assertEqual(YearlyGoal.objects.filter(year_plan=self.year_plan, title="shared title").count(), 1)
+        self.assertEqual(YearlyGoal.objects.filter(year_plan=other_plan, title="shared title").count(), 1)
+
+    def test_goal_create_form_has_double_submit_guard(self):
+        response = self.client.get(f"{reverse('goals:yearly_goal_add')}?list={self.year_plan.pk}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-disable-on-submit')
+
+    def test_edit_delete_and_toggle_still_work_after_add_guard(self):
+        goal = YearlyGoal.objects.create(user=self.user, year_plan=self.year_plan, title="guard regression", category="travel")
+
+        edit_response = self.client.post(
+            reverse("goals:edit_my_list_goal_inline", args=[goal.pk]),
+            {"title": "guard edited", "description": "updated", "category": "study", "item_is_public": "on"},
+        )
+        self.assertRedirects(edit_response, reverse("goals:my_list_detail", args=[self.year_plan.pk]), fetch_redirect_response=False)
+        goal.refresh_from_db()
+        self.assertEqual(goal.title, "guard edited")
+        self.assertEqual(goal.category, "study")
+
+        toggle_response = self.client.post(
+            reverse("goals:toggle_done", args=["yearly", goal.pk]),
+            {"is_done": "1", "completed_date": "2026-01-02"},
+        )
+        self.assertEqual(toggle_response.status_code, 302)
+        goal.refresh_from_db()
+        self.assertTrue(goal.is_done)
+
+        delete_response = self.client.post(reverse("goals:yearly_goal_delete", args=[goal.pk]))
+        self.assertEqual(delete_response.status_code, 302)
+        self.assertFalse(YearlyGoal.objects.filter(pk=goal.pk).exists())
+
     def test_edit_goal_memo_and_display(self):
         goal = YearlyGoal.objects.create(user=self.user, year_plan=self.year_plan, title='編集対象', description='最初のメモ', category='travel')
         url = reverse('goals:edit_my_list_goal_inline', args=[goal.pk])
@@ -1927,7 +2005,7 @@ class PublicListGroupPerformanceTests(TestCase):
                     })
 
         for group in grouped_goals:
-            group["progress_percent"] = views.progress_percent(group["done_count"], group["total_count"])
+            group["progress_percent"] = views.progress_percent(group["done_count"], group["target_count"])
             group["target_progress_percent"] = views.progress_percent(group["done_count"], group["target_count"])
 
         return grouped_goals
@@ -1980,6 +2058,71 @@ class ProgressPercentConsistencyTests(TestCase):
         self.assertEqual(views.progress_percent(5, 10), 50)
         self.assertEqual(views.progress_percent(10, 10), 100)
         self.assertEqual(views.progress_percent(2, 2), 100)
+        self.assertEqual(views.progress_percent(1, 50), 2)
+        self.assertEqual(views.progress_percent(10, 100), 10)
+        self.assertEqual(views.progress_percent(15, 30), 50)
+        self.assertEqual(views.progress_percent(150, 100), 100)
+
+    def create_plan_with_goals(self, *, target_count, done_count, open_count=0, title="Progress check"):
+        plan = YearPlan.objects.create(
+            user=self.user,
+            year=2026,
+            list_title=title,
+            target_count=target_count,
+            is_public=True,
+        )
+        for index in range(done_count):
+            YearlyGoal.objects.create(user=self.user, year_plan=plan, title=f"{title} done {index}", is_done=True)
+        for index in range(open_count):
+            YearlyGoal.objects.create(user=self.user, year_plan=plan, title=f"{title} open {index}", is_done=False)
+        return plan
+
+    def test_progress_uses_target_count_when_registered_count_differs(self):
+        plan = self.create_plan_with_goals(target_count=50, done_count=1, open_count=3)
+
+        profile_response = self.client.get(reverse("goals:my_profile"))
+        detail_response = self.client.get(reverse("goals:my_list_detail", args=[plan.pk]))
+        public_group = views.build_public_list_groups([plan], self.user, include_private=True)[0]
+
+        self.assertEqual(profile_response.status_code, 200)
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(profile_response.context["my_plans"][0].progress_percent, 2)
+        self.assertEqual(detail_response.context["setting"].progress_percent, 2)
+        self.assertEqual(public_group["progress_percent"], 2)
+
+    def test_progress_requested_target_count_examples(self):
+        examples = [
+            (100, 10, 0, 10),
+            (30, 15, 0, 50),
+            (50, 1, 3, 2),
+        ]
+
+        for target_count, done_count, open_count, expected in examples:
+            with self.subTest(target_count=target_count, done_count=done_count, open_count=open_count):
+                plan = self.create_plan_with_goals(
+                    target_count=target_count,
+                    done_count=done_count,
+                    open_count=open_count,
+                    title=f"progress-{target_count}-{done_count}",
+                )
+                response = self.client.get(reverse("goals:my_list_detail", args=[plan.pk]))
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context["setting"].progress_percent, expected)
+
+    def test_progress_zero_target_count_is_zero(self):
+        plan = self.create_plan_with_goals(target_count=0, done_count=3)
+        response = self.client.get(reverse("goals:my_list_detail", args=[plan.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["setting"].progress_percent, 0)
+
+    def test_progress_is_capped_at_100_percent(self):
+        plan = self.create_plan_with_goals(target_count=10, done_count=12)
+        response = self.client.get(reverse("goals:my_list_detail", args=[plan.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["setting"].progress_percent, 100)
 
     def test_my_profile_and_my_list_detail_use_same_progress_formula(self):
         plan = YearPlan.objects.create(
@@ -1997,8 +2140,8 @@ class ProgressPercentConsistencyTests(TestCase):
 
         self.assertEqual(profile_response.status_code, 200)
         self.assertEqual(detail_response.status_code, 200)
-        self.assertEqual(profile_response.context["my_plans"][0].progress_percent, 100)
-        self.assertEqual(detail_response.context["setting"].progress_percent, 100)
+        self.assertEqual(profile_response.context["my_plans"][0].progress_percent, 2)
+        self.assertEqual(detail_response.context["setting"].progress_percent, 2)
 
 
 @override_settings(STORAGES=TEST_STORAGES)
